@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client" // Custom output path
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SUBADMIN
+  VENDOR
+  BUYER
+}
+
+enum LeadType {
+  IDLE
+  DIRECT
+  INQUIRY
+}
+
+enum LeadStatus {
+  PENDING
+  DISTRIBUTED
+  CLOSED
+  EXPIRED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PROCESSED
+}
+
+model User {
+  id               String    @id @default(uuid())
+  name             String
+  email            String    @unique
+  phone            String?   @unique
+  password         String?
+  googleId         String?   @unique
+  avatar           String?
+  role             Role      @default(BUYER)
+  isActive         Boolean   @default(true)
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean   @default(false)
+  otp              String?
+  otpExpiry        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  vendor    Vendor?
+  reviews   Review[]
+  subAdmin  SubAdmin?
+  auditLogs AuditLog[]
+}
+
+model SubAdmin {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  email       String   @unique
+  permissions String[]
+  department  String   @default("GENERAL")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Vendor {
+  id                   String     @id @default(uuid())
+  userId               String     @unique
+  user                 User       @relation(fields: [userId], references: [id])
+  businessName         String
+  email                String
+  phone                String
+  gstNumber            String?
+  aadhaarNumber        String?
+  city                 String
+  categories           Category[]
+  verified             Boolean    @default(false)
+  verificationDocument String?
+  logoUrl              String?
+
+  // Ranking Factors
+  profileCompleteness Int   @default(0)
+  responseTime        Float @default(0)
+  loginFrequency      Int   @default(0)
+  leadClosureRate     Float @default(0)
+  totalScore          Float @default(0)
+  manualBoost         Float @default(0)
+
+  // Subscription Details
+  packageId  String?
+  package    Package?  @relation("VendorPackage", fields: [packageId], references: [id])
+  planExpiry DateTime?
+
+  description        String?
+  address            String?
+  socialLinks        Json?
+  googleBusinessLink String?
+  workingHours       String?
+
+  products       Product[]
+  keywords       Keyword[]
+  gallery        GalleryImage[]
+  certifications Certification[]
+  leads          Lead[]
+  transactions   Transaction[]
+  rankings       Ranking[]
+  reviews        Review[]
+  refunds        Refund[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GalleryImage {
+  id        String   @id @default(uuid())
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  url       String
+  publicId  String
+  createdAt DateTime @default(now())
+}
+
+model Certification {
+  id        String   @id @default(uuid())
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  vendors     Vendor[]
+  leads       Lead[]
+}
+
+model Keyword {
+  id      String   @id @default(uuid())
+  name    String   @unique
+  vendors Vendor[]
+}
+
+enum OfferingType {
+  PRODUCT
+  SERVICE
+}
+
+enum OfferingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Product {
+  id             String         @id @default(uuid())
+  vendorId       String
+  vendor         Vendor         @relation(fields: [vendorId], references: [id])
+  name           String
+  description    String?
+  price          Float?
+  imageUrl       String?
+  category       String?
+  type           OfferingType   @default(PRODUCT)
+  status         OfferingStatus @default(PENDING)
+  moq            Int?           @default(1)
+  availability   Boolean        @default(true)
+  specifications String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  reviews        Review[]
+}
+
+model Lead {
+  id            String   @id @default(uuid())
+  buyerName     String
+  phone         String
+  city          String
+  categoryId    String
+  category      Category @relation(fields: [categoryId], references: [id])
+  type          LeadType @default(INQUIRY)
+  searchKeyword String?
+  message       String?  @db.Text
+
+  vendorId String?
+  vendor   Vendor? @relation(fields: [vendorId], references: [id])
+
+  status       LeadStatus      @default(PENDING)
+  followUpSent Boolean         @default(false)
+  lifecycle    LeadLifecycle[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeadLifecycle {
+  id        String   @id @default(uuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model Package {
+  id            String        @id @default(uuid())
+  name          String        @unique
+  price         Float
+  monthlyLeads  Int           @default(0)
+  leadLimit     Int           @default(0)
+  priority      Int           @default(0)
+  rankingWeight Float         @default(0)
+  description   String?
+  features      String[]      @default([])
+  vendors       Vendor[]      @relation("VendorPackage")
+  transactions  Transaction[]
+}
+
+model Transaction {
+  id                String            @id @default(uuid())
+  vendorId          String
+  vendor            Vendor            @relation(fields: [vendorId], references: [id])
+  packageId         String?
+  package           Package?          @relation(fields: [packageId], references: [id])
+  amount            Float
+  currency          String            @default("INR")
+  status            TransactionStatus @default(PENDING)
+  razorpayOrderId   String?           @unique
+  razorpayPaymentId String?           @unique
+  razorpaySignature String?
+  invoiceUrl        String?
+
+  type             String    @default("PURCHASE")
+  subscriptionDays Int       @default(30)
+  expiryAt         DateTime?
+
+  refund    Refund?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Refund {
+  id               String       @id @default(uuid())
+  vendorId         String
+  vendor           Vendor       @relation(fields: [vendorId], references: [id])
+  transactionId    String       @unique
+  transaction      Transaction  @relation(fields: [transactionId], references: [id])
+  amount           Float
+  reason           String
+  status           RefundStatus @default(REQUESTED)
+  adminNote        String?
+  razorpayRefundId String?
+  processedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model Ranking {
+  id       String   @id @default(uuid())
+  vendorId String
+  vendor   Vendor   @relation(fields: [vendorId], references: [id])
+  score    Float
+  date     DateTime @default(now())
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String // e.g., "APPROVE_VENDOR", "DELETE_CATEGORY"
+  module    String // e.g., "VENDOR", "USER", "OFFERING"
+  details   String?  @db.Text
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model SystemSettings {
+  id                       String   @id @default("global")
+  rankingWeightProfile     Float    @default(0.4)
+  rankingWeightPerformance Float    @default(0.6)
+  maxLeadsPerVendorPerDay  Int      @default(10)
+  updatedAt                DateTime @updatedAt
+}
