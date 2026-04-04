@@ -1,15 +1,25 @@
 const Redis = require('ioredis');
 
 // Initialize Redis Client
-// Uses a default localhost URL if REDIS_URL is not set
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redisUrl = process.env.REDIS_URL ;
+
+if (!process.env.REDIS_URL) {
+  console.warn('⚠️  REDIS_URL is not set. Defaulting to localhost:6379');
+}
+
+const redis = new Redis(redisUrl, {
+  maxRetriesPerRequest: 3,
+  retryStrategy(times) {
+    return Math.min(times * 100, 3000);
+  }
+});
 
 redis.on('connect', () => {
   console.log('✅ Redis client connected');
 });
 
 redis.on('error', (err) => {
-  console.error('❌ Redis Connection Error:', err);
+  console.error('❌ Redis Connection Error:', err.message);
 });
 
 /**
