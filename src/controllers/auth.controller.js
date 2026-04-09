@@ -4,6 +4,7 @@ const prisma = require("../config/prisma");
 const catchAsync = require("../utils/catchAsync");
 const AppError = require("../utils/AppError");
 const ApiResponse = require("../utils/ApiResponse");
+const notificationService = require("../services/notification.service");
 
 exports.register = catchAsync(async (req, res, next) => {
   const { name, email, phone, password, role, otp } = req.body;
@@ -18,8 +19,6 @@ exports.register = catchAsync(async (req, res, next) => {
     if (!user || user.otp !== otp || (user.otpExpiry && new Date() > user.otpExpiry)) {
       return next(new AppError("Invalid or expired email verification code", 401));
     }
-    // Clear OTP after verification if we proceed
-    // We'll update the user (or create) later
   } else {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -30,8 +29,6 @@ exports.register = catchAsync(async (req, res, next) => {
 
   const hashed = await bcrypt.hash(password, 10);
 
-  // If there was a placeholder user from OTP request, update it.
-  // Otherwise create new.
   let user;
   const existingUser = await prisma.user.findUnique({ where: { email } });
   
@@ -43,7 +40,7 @@ exports.register = catchAsync(async (req, res, next) => {
             phone,
             password: hashed,
             role: role || "VENDOR",
-            otp: null, // Clear otp
+            otp: null,
             otpExpiry: null
         }
     });
@@ -59,9 +56,14 @@ exports.register = catchAsync(async (req, res, next) => {
     });
   }
 
-  // Remove password from response
-  user.password = undefined;
+  // Send Welcome Email
+  notificationService.sendEmail({
+    email: user.email,
+    subject: "✨ Welcome to B2B Community Marketplace!",
+    html: `<h3>Hello ${user.name},</h3><p>Your account has been created successfully. Welcome to our community!</p>`
+  }).catch(err => console.error("Welcome email failed:", err));
 
+  user.password = undefined;
   res.status(201).json(new ApiResponse(201, user, "User registered successfully"));
 });
 
@@ -73,7 +75,6 @@ exports.login = catchAsync(async (req, res, next) => {
     return next(new AppError("Please provide email/phone and password", 400));
   }
 
-  // Find user by email OR phone
   const user = await prisma.user.findFirst({
     where: {
       OR: [
@@ -88,7 +89,6 @@ exports.login = catchAsync(async (req, res, next) => {
     return next(new AppError("Incorrect credentials", 401));
   }
 
-  // Check for 2FA
   if (user.twoFactorEnabled) {
     return res.status(200).json(new ApiResponse(200, { 
       mfaRequired: true, 
@@ -129,7 +129,7 @@ exports.requestOTP = catchAsync(async (req, res, next) => {
     user = await prisma.user.create({
       data: {
         phone,
-        name: phone, // Store phone as name initially instead of Node_ placeholder
+        name: phone,
         email: `guest_${phone.slice(-4)}_${Date.now()}@placeholder.com`,
         role: 'BUYER'
       }
@@ -142,9 +142,7 @@ exports.requestOTP = catchAsync(async (req, res, next) => {
     data: { otp, otpExpiry: new Date(Date.now() + 10 * 60 * 1000) }
   });
 
-  console.log(`\n----------------------------------------------`);
-  console.log(`📱 [MOBILE LOGIN] OTP FOR ${phone}: ${otp}`);
-  console.log(`----------------------------------------------\n`);
+  console.log(`\n📱 [MOBILE LOGIN] OTP FOR ${phone}: ${otp}\n`);
 
   res.status(200).json(new ApiResponse(200, null, "OTP transmitted to terminal hub."));
 });
@@ -153,36 +151,16 @@ exports.requestEmailOTP = catchAsync(async (req, res, next) => {
   const { email } = req.body;
   if (!email) return next(new AppError("Email address is required", 400));
 
-  // Generate OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-  // Check if we already have a record for this email (could be a registered user or a placeholder)
   let user = await prisma.user.findUnique({ where: { email } });
   
-  if (user && user.password) {
-    // If user exists and is fully registered, maybe they are trying to reset password or re-register
-    // For registration flow, if they exist, they shouldn't be registering again.
-    // However, for simplicity, let's just update the OTP for verification.
-  }
-
-  // We can't easily save to User table if the user doesn't exist yet and we don't want to create a ghost user.
-  // But to follow the existing pattern, let's just log it to terminal.
-  // In a real app, we'd store this in a 'PendingVerifications' table.
-  // Since I don't want to change the schema for a simple UI request, I'll use the console log strategy.
-  
-  console.log(`\n----------------------------------------------`);
-  console.log(`📧 [EMAIL VERIFICATION] OTP FOR ${email}`);
-  console.log(`🎫 CODE: ${otp}`);
-  console.log(`----------------------------------------------\n`);
-
-  // To make it functional without schema changes, let's actually store it if possible.
-  // We can create a temporary user with ONLY email if it doesn't exist.
   if (!user) {
     await prisma.user.create({
         data: {
             email,
-            name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1).toLowerCase(),
+            name: email.split('@')[0],
             otp,
             otpExpiry,
             role: 'VENDOR'
@@ -195,7 +173,21 @@ exports.requestEmailOTP = catchAsync(async (req, res, next) => {
     });
   }
 
-  res.status(200).json(new ApiResponse(200, null, "Email verification code sent to terminal hub."));
+  // Send LIVE Email OTP
+  await notificationService.sendEmail({
+    email,
+    subject: "🔐 Your Verification Code",
+    html: `<div style="padding: 20px; border: 1px solid #ddd;">
+             <h2>Verification Code</h2>
+             <p>Your one-time password (OTP) is:</p>
+             <h1 style="color: #3498db; letter-spacing: 5px;">${otp}</h1>
+             <p>This code will expire in 10 minutes.</p>
+           </div>`
+  });
+
+  console.log(`\n📧 [EMAIL VERIFICATION] OTP FOR ${email}: ${otp}\n`);
+
+  res.status(200).json(new ApiResponse(200, null, "Email verification code sent to your inbox."));
 });
 
 exports.verifyOTPLogin = catchAsync(async (req, res, next) => {

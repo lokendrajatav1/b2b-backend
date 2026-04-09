@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  output        = "../src/generated/client" // Custom output path
+  output        = "../src/generated/client_v2" // Custom output path
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -178,7 +178,7 @@ model Product {
   name           String
   description    String?
   price          Float?
-  imageUrl       String?
+  images         String[]       @default([])
   category       String?
   type           OfferingType   @default(PRODUCT)
   status         OfferingStatus @default(PENDING)

@@ -125,9 +125,46 @@ const notifySubscriptionEvent = async (vendor, eventType, details) => {
   await sendWhatsApp(vendor.phone, `*${title}*\n\nHello ${vendor.businessName},\n${message}`);
 };
 
+/**
+ * Vendor Registration Success Notification
+ */
+const notifyVendorRegistration = async (vendor) => {
+  console.log(`[AUTH] 🏪 New Vendor Registration: ${vendor.businessName} (${vendor.email})`);
+  
+  const subject = '🏪 Welcome to B2B Community Marketplace!';
+  const message = `Hello ${vendor.businessName}, your vendor registration has been received successfully. Our team will review your documents and verify your profile soon.`;
+  
+  // 1. Email
+  await sendEmail({
+    email: vendor.email,
+    subject: subject,
+    message: message,
+    html: `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 25px; border: 1px solid #e1e4e8; border-radius: 8px; max-width: 600px; margin: 0 auto; color: #333;">
+        <h2 style="color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">Welcome to the Network!</h2>
+        <p>Dear <strong>${vendor.businessName}</strong>,</p>
+        <p>We are excited to inform you that your vendor registration on the <strong>B2B Community Marketplace</strong> has been successfully submitted.</p>
+        
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0;">
+          <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: #f39c12; font-weight: bold;">Pending Verification</span></p>
+          <p style="margin: 5px 0;"><strong>Registration ID:</strong> ${vendor.id}</p>
+        </div>
+
+        <p>Our admin team is currently reviewing your application and documents. You will receive another notification once your profile is verified and live.</p>
+        
+        <p style="margin-top: 30px;">Best Regards,<br><strong>The Admin Team</strong><br>B2B Community Marketplace</p>
+      </div>
+    `
+  });
+
+  // 2. WhatsApp
+  await sendWhatsApp(vendor.phone, `🏪 *Welcome to B2B Community!* \n\nHello ${vendor.businessName}, your registration is successful. Status: *Pending Verification*. Our team will review your profile shortly.`);
+};
+
 module.exports = { 
   sendEmail, 
   sendWhatsApp, 
   notifyVendorOfLead,
-  notifySubscriptionEvent 
+  notifySubscriptionEvent,
+  notifyVendorRegistration
 };

@@ -4,6 +4,8 @@ const ApiResponse = require('../utils/ApiResponse');
 const AppError = require('../utils/AppError');
 const { encrypt, decrypt } = require('../utils/encryption');
 
+const notificationService = require('../services/notification.service');
+
 // Register Vendor
 exports.registerVendor = catchAsync(async (req, res, next) => {
   const { 
@@ -12,12 +14,15 @@ exports.registerVendor = catchAsync(async (req, res, next) => {
     googleBusinessLink, workingHours, logoUrl 
   } = req.body;
 
+  console.log(`[VENDOR] 🛠️  Processing registration request for: ${businessName}...`);
+
   // Check if user already has a vendor profile
   const existingVendor = await prisma.vendor.findUnique({
     where: { userId: req.user.id }
   });
 
   if (existingVendor) {
+    console.warn(`[VENDOR] ❌ Registration failed: User ${req.user.id} already has a profile.`);
     return next(new AppError('Vendor profile already exists for this user', 400));
   }
 
@@ -53,6 +58,11 @@ exports.registerVendor = catchAsync(async (req, res, next) => {
     gstNumber: vendor.gstNumber ? decrypt(vendor.gstNumber) : null,
     aadhaarNumber: vendor.aadhaarNumber ? decrypt(vendor.aadhaarNumber) : null
   };
+
+  // Trigger Notifications
+  await notificationService.notifyVendorRegistration(responseVendor);
+  
+  console.log(`[VENDOR] ✅ Successfully registered: ${businessName} | ID: ${vendor.id}`);
 
   res.status(201).json(new ApiResponse(201, responseVendor, "Vendor registration submitted. Pending admin approval."));
 });
@@ -215,7 +225,7 @@ exports.updateMyProfile = catchAsync(async (req, res, next) => {
             description: data.description || '',
             price: parseFloat(data.price) || 0,
             category: data.category || (vendor.categories && vendor.categories[0]?.name) || '',
-            imageUrl: data.image || data.imageUrl || '',
+            images: Array.isArray(data.images) ? data.images.slice(0, 5) : (data.image || data.imageUrl ? [data.image || data.imageUrl] : []),
             moq: parseInt(data.moq) || 1,
             availability: data.availability !== undefined ? !!data.availability : true,
             specifications: data.specifications || '',
@@ -309,8 +319,8 @@ exports.updateSensitiveInfo = catchAsync(async (req, res, next) => {
 // Add Single Product/Service
 exports.addProduct = catchAsync(async (req, res, next) => {
     const { 
-        name, description, price, category, imageUrl, 
-        image, moq, availability, specifications, type 
+        name, description, price, category, images,
+        moq, availability, specifications, type 
     } = req.body;
 
     const vendor = await prisma.vendor.findUnique({
@@ -326,7 +336,7 @@ exports.addProduct = catchAsync(async (req, res, next) => {
             description: description || '',
             price: parseFloat(price) || 0,
             category: category || (vendor.categories && vendor.categories[0]?.name) || '',
-            imageUrl: image || imageUrl || '', // Support both keys
+            images: Array.isArray(images) ? images.slice(0, 5) : [],
             moq: parseInt(moq) || 1,
             availability: availability !== undefined ? !!availability : true,
             specifications: specifications || '',
@@ -341,8 +351,8 @@ exports.addProduct = catchAsync(async (req, res, next) => {
 exports.updateProduct = catchAsync(async (req, res, next) => {
     const { productId } = req.params;
     const { 
-        name, description, price, category, imageUrl, 
-        image, moq, availability, specifications, type 
+        name, description, price, category, images,
+        moq, availability, specifications, type 
     } = req.body;
 
     const vendor = await prisma.vendor.findUnique({
@@ -359,7 +369,7 @@ exports.updateProduct = catchAsync(async (req, res, next) => {
             description,
             price: parseFloat(price) || 0,
             category: category || (vendor.categories && vendor.categories[0]?.name) || '',
-            imageUrl: image || imageUrl,
+            images: Array.isArray(images) ? images.slice(0, 5) : [],
             moq: parseInt(moq) || 1,
             availability: availability !== undefined ? !!availability : true,
             specifications,

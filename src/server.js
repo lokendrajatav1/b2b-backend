@@ -43,7 +43,7 @@ app.use(compression()); // Gzip compression for faster load times
 
 // 3. CORS & DATA PARSING
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "*",
+  origin: true, // Mirror the request origin to allow all sources in DEV
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));

@@ -11161,7 +11161,6 @@ export namespace Prisma {
     name: string | null
     description: string | null
     price: number | null
-    imageUrl: string | null
     category: string | null
     type: $Enums.OfferingType | null
     status: $Enums.OfferingStatus | null
@@ -11178,7 +11177,6 @@ export namespace Prisma {
     name: string | null
     description: string | null
     price: number | null
-    imageUrl: string | null
     category: string | null
     type: $Enums.OfferingType | null
     status: $Enums.OfferingStatus | null
@@ -11195,7 +11193,7 @@ export namespace Prisma {
     name: number
     description: number
     price: number
-    imageUrl: number
+    images: number
     category: number
     type: number
     status: number
@@ -11224,7 +11222,6 @@ export namespace Prisma {
     name?: true
     description?: true
     price?: true
-    imageUrl?: true
     category?: true
     type?: true
     status?: true
@@ -11241,7 +11238,6 @@ export namespace Prisma {
     name?: true
     description?: true
     price?: true
-    imageUrl?: true
     category?: true
     type?: true
     status?: true
@@ -11258,7 +11254,7 @@ export namespace Prisma {
     name?: true
     description?: true
     price?: true
-    imageUrl?: true
+    images?: true
     category?: true
     type?: true
     status?: true
@@ -11362,7 +11358,7 @@ export namespace Prisma {
     name: string
     description: string | null
     price: number | null
-    imageUrl: string | null
+    images: string[]
     category: string | null
     type: $Enums.OfferingType
     status: $Enums.OfferingStatus
@@ -11398,7 +11394,7 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     price?: boolean
-    imageUrl?: boolean
+    images?: boolean
     category?: boolean
     type?: boolean
     status?: boolean
@@ -11418,7 +11414,7 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     price?: boolean
-    imageUrl?: boolean
+    images?: boolean
     category?: boolean
     type?: boolean
     status?: boolean
@@ -11436,7 +11432,7 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     price?: boolean
-    imageUrl?: boolean
+    images?: boolean
     category?: boolean
     type?: boolean
     status?: boolean
@@ -11454,7 +11450,7 @@ export namespace Prisma {
     name?: boolean
     description?: boolean
     price?: boolean
-    imageUrl?: boolean
+    images?: boolean
     category?: boolean
     type?: boolean
     status?: boolean
@@ -11465,7 +11461,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type ProductOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "vendorId" | "name" | "description" | "price" | "imageUrl" | "category" | "type" | "status" | "moq" | "availability" | "specifications" | "createdAt" | "updatedAt", ExtArgs["result"]["product"]>
+  export type ProductOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "vendorId" | "name" | "description" | "price" | "images" | "category" | "type" | "status" | "moq" | "availability" | "specifications" | "createdAt" | "updatedAt", ExtArgs["result"]["product"]>
   export type ProductInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     vendor?: boolean | VendorDefaultArgs<ExtArgs>
     reviews?: boolean | Product$reviewsArgs<ExtArgs>
@@ -11490,7 +11486,7 @@ export namespace Prisma {
       name: string
       description: string | null
       price: number | null
-      imageUrl: string | null
+      images: string[]
       category: string | null
       type: $Enums.OfferingType
       status: $Enums.OfferingStatus
@@ -11929,7 +11925,7 @@ export namespace Prisma {
     readonly name: FieldRef<"Product", 'String'>
     readonly description: FieldRef<"Product", 'String'>
     readonly price: FieldRef<"Product", 'Float'>
-    readonly imageUrl: FieldRef<"Product", 'String'>
+    readonly images: FieldRef<"Product", 'String[]'>
     readonly category: FieldRef<"Product", 'String'>
     readonly type: FieldRef<"Product", 'OfferingType'>
     readonly status: FieldRef<"Product", 'OfferingStatus'>
@@ -23792,7 +23788,7 @@ export namespace Prisma {
     name: 'name',
     description: 'description',
     price: 'price',
-    imageUrl: 'imageUrl',
+    images: 'images',
     category: 'category',
     type: 'type',
     status: 'status',
@@ -24768,7 +24764,7 @@ export namespace Prisma {
     name?: StringFilter<"Product"> | string
     description?: StringNullableFilter<"Product"> | string | null
     price?: FloatNullableFilter<"Product"> | number | null
-    imageUrl?: StringNullableFilter<"Product"> | string | null
+    images?: StringNullableListFilter<"Product">
     category?: StringNullableFilter<"Product"> | string | null
     type?: EnumOfferingTypeFilter<"Product"> | $Enums.OfferingType
     status?: EnumOfferingStatusFilter<"Product"> | $Enums.OfferingStatus
@@ -24787,7 +24783,7 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrderInput | SortOrder
     price?: SortOrderInput | SortOrder
-    imageUrl?: SortOrderInput | SortOrder
+    images?: SortOrder
     category?: SortOrderInput | SortOrder
     type?: SortOrder
     status?: SortOrder
@@ -24809,7 +24805,7 @@ export namespace Prisma {
     name?: StringFilter<"Product"> | string
     description?: StringNullableFilter<"Product"> | string | null
     price?: FloatNullableFilter<"Product"> | number | null
-    imageUrl?: StringNullableFilter<"Product"> | string | null
+    images?: StringNullableListFilter<"Product">
     category?: StringNullableFilter<"Product"> | string | null
     type?: EnumOfferingTypeFilter<"Product"> | $Enums.OfferingType
     status?: EnumOfferingStatusFilter<"Product"> | $Enums.OfferingStatus
@@ -24828,7 +24824,7 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrderInput | SortOrder
     price?: SortOrderInput | SortOrder
-    imageUrl?: SortOrderInput | SortOrder
+    images?: SortOrder
     category?: SortOrderInput | SortOrder
     type?: SortOrder
     status?: SortOrder
@@ -24853,7 +24849,7 @@ export namespace Prisma {
     name?: StringWithAggregatesFilter<"Product"> | string
     description?: StringNullableWithAggregatesFilter<"Product"> | string | null
     price?: FloatNullableWithAggregatesFilter<"Product"> | number | null
-    imageUrl?: StringNullableWithAggregatesFilter<"Product"> | string | null
+    images?: StringNullableListFilter<"Product">
     category?: StringNullableWithAggregatesFilter<"Product"> | string | null
     type?: EnumOfferingTypeWithAggregatesFilter<"Product"> | $Enums.OfferingType
     status?: EnumOfferingStatusWithAggregatesFilter<"Product"> | $Enums.OfferingStatus
@@ -26281,7 +26277,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -26300,7 +26296,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -26317,7 +26313,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -26336,7 +26332,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -26354,7 +26350,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -26370,7 +26366,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -26387,7 +26383,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -27910,7 +27906,7 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     price?: SortOrder
-    imageUrl?: SortOrder
+    images?: SortOrder
     category?: SortOrder
     type?: SortOrder
     status?: SortOrder
@@ -27932,7 +27928,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     price?: SortOrder
-    imageUrl?: SortOrder
     category?: SortOrder
     type?: SortOrder
     status?: SortOrder
@@ -27949,7 +27944,6 @@ export namespace Prisma {
     name?: SortOrder
     description?: SortOrder
     price?: SortOrder
-    imageUrl?: SortOrder
     category?: SortOrder
     type?: SortOrder
     status?: SortOrder
@@ -29315,6 +29309,10 @@ export namespace Prisma {
     deleteMany?: VendorScalarWhereInput | VendorScalarWhereInput[]
   }
 
+  export type ProductCreateimagesInput = {
+    set: string[]
+  }
+
   export type VendorCreateNestedOneWithoutProductsInput = {
     create?: XOR<VendorCreateWithoutProductsInput, VendorUncheckedCreateWithoutProductsInput>
     connectOrCreate?: VendorCreateOrConnectWithoutProductsInput
@@ -29341,6 +29339,11 @@ export namespace Prisma {
     decrement?: number
     multiply?: number
     divide?: number
+  }
+
+  export type ProductUpdateimagesInput = {
+    set?: string[]
+    push?: string | string[]
   }
 
   export type EnumOfferingTypeFieldUpdateOperationsInput = {
@@ -30673,7 +30676,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -30690,7 +30693,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -31090,7 +31093,7 @@ export namespace Prisma {
     name?: StringFilter<"Product"> | string
     description?: StringNullableFilter<"Product"> | string | null
     price?: FloatNullableFilter<"Product"> | number | null
-    imageUrl?: StringNullableFilter<"Product"> | string | null
+    images?: StringNullableListFilter<"Product">
     category?: StringNullableFilter<"Product"> | string | null
     type?: EnumOfferingTypeFilter<"Product"> | $Enums.OfferingType
     status?: EnumOfferingStatusFilter<"Product"> | $Enums.OfferingStatus
@@ -33530,7 +33533,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -33548,7 +33551,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -33720,7 +33723,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -33738,7 +33741,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -33926,7 +33929,7 @@ export namespace Prisma {
     name: string
     description?: string | null
     price?: number | null
-    imageUrl?: string | null
+    images?: ProductCreateimagesInput | string[]
     category?: string | null
     type?: $Enums.OfferingType
     status?: $Enums.OfferingStatus
@@ -34039,7 +34042,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -34056,7 +34059,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
@@ -34073,7 +34076,7 @@ export namespace Prisma {
     name?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
     price?: NullableFloatFieldUpdateOperationsInput | number | null
-    imageUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    images?: ProductUpdateimagesInput | string[]
     category?: NullableStringFieldUpdateOperationsInput | string | null
     type?: EnumOfferingTypeFieldUpdateOperationsInput | $Enums.OfferingType
     status?: EnumOfferingStatusFieldUpdateOperationsInput | $Enums.OfferingStatus
