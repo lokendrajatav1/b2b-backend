@@ -20,8 +20,8 @@ exports.createLead = catchAsync(async (req, res, next) => {
     }
   });
 
-  // Type 3: Inquiry Distribution
-  leadService.distributeInquiryLead(lead.id).catch(err => console.error("Lead distribution failed:", err));
+  // Type 3: Inquiry Distribution (DISABLED - Only Admin Dashboard)
+  // leadService.distributeInquiryLead(lead.id).catch(err => console.error("Lead distribution failed:", err));
 
   res.status(201).json(new ApiResponse(201, lead, "Inquiry submitted successfully."));
 });
@@ -45,8 +45,8 @@ exports.createIdleLead = catchAsync(async (req, res, next) => {
     }
   });
 
-  // Type 1: Idle Distribution (Strictly Diamond)
-  leadService.distributeInquiryLead(lead.id).catch(err => console.error("Idle lead distribution failed:", err));
+  // Type 1: Idle Distribution (DISABLED - Only Admin Dashboard)
+  // leadService.distributeInquiryLead(lead.id).catch(err => console.error("Idle lead distribution failed:", err));
 
   res.status(201).json(new ApiResponse(201, lead, "Idle lead captured."));
 });
@@ -55,7 +55,7 @@ exports.createIdleLead = catchAsync(async (req, res, next) => {
  * Lead Type 2: Direct Action (Call / WhatsApp)
  */
 exports.createDirectLead = catchAsync(async (req, res, next) => {
-  const { buyerName, phone, city, categoryId, vendorId, actionType } = req.body;
+  const { buyerName, phone, city, categoryId, vendorId, actionType, message: bodyMessage } = req.body;
 
   if (!vendorId || !actionType) {
     return next(new AppError('vendorId and actionType are required for direct leads', 400));
@@ -71,9 +71,13 @@ exports.createDirectLead = catchAsync(async (req, res, next) => {
       phone: phone || 'N/A',
       city: city || vendor.city,
       categoryId: categoryId || vendor.categories?.[0]?.id,
-      vendorId,
+      // We set vendorId to null so the vendor doesn't see it in their panel.
+      // Admin will see the target vendor in the message/logs.
+      // Assign directly to the vendor being contacted
+      vendorId: vendorId, 
+      message: bodyMessage || `DIRECT ${actionType}: Interested in your business. Buyer Phone: ${phone || 'N/A'}`,
       type: 'DIRECT',
-      status: 'DISTRIBUTED'
+      status: 'DISTRIBUTED' 
     }
   });
 
@@ -92,17 +96,19 @@ exports.createDirectLead = catchAsync(async (req, res, next) => {
 exports.getVendorLeads = catchAsync(async (req, res, next) => {
   // Vendors can only see their own leads
   const vendor = await prisma.vendor.findUnique({ where: { userId: req.user.id } });
-  if (!vendor && req.user.role !== 'ADMIN') {
+  console.log("[DEBUG-VENDOR-LEADS] Searching for VendorID:", vendor?.id, "for UserID:", req.user.id);
+  if (!vendor && req.user.role !== 'SUPERADMIN') {
     return next(new AppError('Vendor profile not found', 404));
   }
 
-  const targetVendorId = req.user.role === 'ADMIN' ? req.params.vendorId : vendor.id;
+  const targetVendorId = req.user.role === 'SUPERADMIN' ? req.params.vendorId : vendor.id;
 
   const leads = await prisma.lead.findMany({
     where: { vendorId: targetVendorId },
     orderBy: { createdAt: 'desc' },
     include: { lifecycle: true, category: true }
   });
+  console.log(`[DEBUG-V-LEADS] Found ${leads.length} leads for VendorID: ${targetVendorId}`);
 
   res.status(200).json(new ApiResponse(200, leads));
 });
@@ -135,7 +141,9 @@ exports.updateLeadStatus = catchAsync(async (req, res, next) => {
   }
 
   if (status === 'REDISTRIBUTE') {
-    await leadService.redistributeLead(leadId);
+    // Make redistribution non-blocking for faster UI response
+    leadService.redistributeLead(leadId).catch(err => console.error("Background redistribution failed:", err));
+    
     return res.status(200).json(new ApiResponse(200, null, 'Lead has been sent for redistribution'));
   }
 
@@ -190,8 +198,8 @@ exports.matchWithYou = catchAsync(async (req, res, next) => {
     }
   });
 
-  // Distribute it natively as well so vendors get it in their dashboard
-  leadService.distributeInquiryLead(lead.id).catch(err => console.error("Match lead distribution failed:", err));
+  // Distribute it natively as well (DISABLED - Admin handles assignment)
+  // leadService.distributeInquiryLead(lead.id).catch(err => console.error("Match lead distribution failed:", err));
 
   res.status(200).json(new ApiResponse(200, {
     message: "We've matched you with the best vendors!",

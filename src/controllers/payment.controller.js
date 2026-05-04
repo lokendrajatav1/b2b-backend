@@ -21,14 +21,13 @@ exports.createOrder = catchAsync(async (req, res, next) => {
   if (!pkg) return next(new AppError('Subscription package not found', 404));
 
   const options = {
-    amount: pkg.price * 100, // amount in the smallest currency unit (paise)
+    amount: pkg.price * 100,
     currency: 'INR',
     receipt: `receipt_${Date.now()}`,
   };
 
   const order = await razorpay.orders.create(options);
 
-  // Create pending transaction in DB
   await prisma.transaction.create({
     data: {
       vendorId: vendor.id,
@@ -56,7 +55,6 @@ exports.verifyPayment = catchAsync(async (req, res, next) => {
     return next(new AppError('Invalid payment signature', 400));
   }
 
-  // Fetch the package to get pricing and name
   const transactionForPackage = await prisma.transaction.findUnique({
     where: { razorpayOrderId },
     include: { vendor: true, package: true }
@@ -75,11 +73,9 @@ exports.verifyPayment = catchAsync(async (req, res, next) => {
     }
   }
 
-  // Calculate Expiry (Default 30 days)
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + 30);
 
-  // Update transaction and vendor plan
   const transaction = await prisma.transaction.update({
     where: { razorpayOrderId },
     data: {
@@ -101,7 +97,6 @@ exports.verifyPayment = catchAsync(async (req, res, next) => {
     }
   });
 
-  // Create In-App Notification
   await prisma.notification.create({
     data: {
       userId: transaction.vendor.userId,
@@ -110,15 +105,71 @@ exports.verifyPayment = catchAsync(async (req, res, next) => {
     }
   });
 
-  // Send Email & WhatsApp Notification
   const notificationService = require('../services/notification.service');
   await notificationService.notifySubscriptionEvent(transaction.vendor, 'UPGRADE', {
     packageName: transaction.package?.name || 'Premium',
     expiry: expiryDate.toLocaleDateString()
   });
 
-  // INSTANT RANKING UPDATE on upgrade
   await leadService.recalculateRankings(transaction.vendorId);
 
   res.status(200).json(new ApiResponse(200, { invoiceUrl }, 'Payment verified and subscription activated'));
 });
+
+/**
+ * FREE ACTIVATE — Assign subscription without payment (demo/test mode)
+ */
+exports.freeActivate = catchAsync(async (req, res, next) => {
+  const { packageId } = req.body;
+
+  const vendor = await prisma.vendor.findUnique({
+    where: { userId: req.user.id },
+    include: { user: true }
+  });
+  if (!vendor) return next(new AppError('Vendor profile not found', 404));
+
+  const pkg = await prisma.package.findUnique({ where: { id: packageId } });
+  if (!pkg) return next(new AppError('Package not found', 404));
+
+  // 30-day expiry from now
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + 30);
+
+  // Update vendor subscription
+  await prisma.vendor.update({
+    where: { id: vendor.id },
+    data: { packageId: pkg.id, planExpiry: expiryDate }
+  });
+
+  // Log a FREE transaction record
+  await prisma.transaction.create({
+    data: {
+      vendorId: vendor.id,
+      packageId: pkg.id,
+      amount: 0,
+      currency: 'INR',
+      status: 'COMPLETED',
+      subscriptionDays: 30,
+      expiryAt: expiryDate,
+      razorpayOrderId: `free_${Date.now()}`
+    }
+  });
+
+  // In-app notification
+  await prisma.notification.create({
+    data: {
+      userId: vendor.userId,
+      title: `${pkg.name} Plan Activated!`,
+      message: `Your ${pkg.name} subscription is now active. Expiry: ${expiryDate.toLocaleDateString('en-IN')}.`
+    }
+  });
+
+  // Recalculate ranking
+  await leadService.recalculateRankings(vendor.id);
+
+  res.status(200).json(new ApiResponse(200, {
+    package: pkg.name,
+    expiry: expiryDate
+  }, 'Subscription activated successfully'));
+});
+

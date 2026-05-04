@@ -51,6 +51,7 @@ const leadValidation = {
       phone: Joi.string().optional().allow(''),
       city: Joi.string().optional().allow(''),
       categoryId: Joi.string().optional(),
+      message: Joi.string().optional().allow(''),
     }),
   },
   updateLeadStatus: {
@@ -84,6 +85,8 @@ const vendorValidation = {
       city: Joi.string().optional().trim(),
       categoryId: Joi.string().optional().uuid(),
       search: Joi.string().optional().allow(''),
+      offeringType: Joi.string().optional().valid('PRODUCT', 'SERVICE'),
+      verified: Joi.string().optional().valid('true', 'false'),
       page: Joi.number().optional().min(1).default(1),
       limit: Joi.number().optional().min(1).max(50).default(10),
     }),

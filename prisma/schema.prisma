@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  output        = "../src/generated/client_v2" // Custom output path
+  output        = "../src/generated/client_v3" // Custom output path
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -11,7 +11,7 @@ datasource db {
 
 enum Role {
   ADMIN
-  SUBADMIN
+  SUPERADMIN
   VENDOR
   BUYER
 }
@@ -62,11 +62,11 @@ model User {
 
   vendor    Vendor?
   reviews   Review[]
-  subAdmin  SubAdmin?
+  admin     Admin?
   auditLogs AuditLog[]
 }
 
-model SubAdmin {
+model Admin {
   id          String   @id @default(uuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id])
@@ -74,9 +74,12 @@ model SubAdmin {
   email       String   @unique
   permissions String[]
   department  String   @default("GENERAL")
+  hubName     String?  // The regional hub name
+  categoryIds String[] // Categories assigned to this sub-admin
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  @@map("SubAdmin")
 }
 
 model Vendor {
@@ -320,5 +323,31 @@ model SystemSettings {
   rankingWeightProfile     Float    @default(0.4)
   rankingWeightPerformance Float    @default(0.6)
   maxLeadsPerVendorPerDay  Int      @default(10)
+  marketplaceId            String   @default("B2B-INDIA-ROOT-01")
+  hubName                  String   @default("Mumbai Central")
+  alertVendorOnboarding    Boolean  @default(true)
+  alertPaymentExceptions   Boolean  @default(true)
+  alertInquirySpikes       Boolean  @default(false)
   updatedAt                DateTime @updatedAt
+}
+
+model GlobalSettings {
+  id               String   @id @default("global")
+  websiteName      String   @default("Admission Master")
+  contactEmail     String   @default("contact@example.com")
+  contactPhone     String   @default("+91 0000000000")
+  address          String   @default("Your Address Here")
+  logoUrl          String?
+  facebookUrl      String?
+  twitterUrl       String?
+  instagramUrl     String?
+  linkedinUrl      String?
+  youtubeUrl       String?
+  seoTitle         String?
+  seoDescription   String?
+  seoKeywords      String?
+  primaryColor     String   @default("#000000")
+  secondaryColor   String   @default("#ffffff")
+  googleAdSenseId  String?
+  updatedAt        DateTime @updatedAt
 }

@@ -30,7 +30,7 @@ const handleCloudinaryUpload = async (req, res, next) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: process.env.CLOUDINARY_FOLDER || 'b2b-marketplace',
-          allowed_formats: ['jpg', 'png', 'jpeg', 'pdf'],
+          allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'avif', 'webp'],
           resource_type: 'auto'
         },
         (error, result) => {

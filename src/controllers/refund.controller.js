@@ -51,7 +51,7 @@ exports.getMyRefunds = catchAsync(async (req, res, next) => {
   res.status(200).json(new ApiResponse(200, refunds, 'Fetched your refund requests'));
 });
 
-// ADMIN: Get all refunds
+// SUPERADMIN: Get all refunds
 exports.getAllRefunds = catchAsync(async (req, res, next) => {
   const { status, page = 1, limit = 10 } = req.query;
   const skip = (page - 1) * limit;
@@ -80,7 +80,7 @@ exports.getAllRefunds = catchAsync(async (req, res, next) => {
   }));
 });
 
-// ADMIN: Update refund status
+// SUPERADMIN: Update refund status
 exports.updateRefundStatus = catchAsync(async (req, res, next) => {
   const { id } = req.params;
   const { status, adminNote, razorpayRefundId } = req.body;

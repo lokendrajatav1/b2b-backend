@@ -10,5 +10,6 @@ router.use(restrictTo('VENDOR'));
 
 router.post('/create-order', paymentController.createOrder);
 router.post('/verify-payment', paymentController.verifyPayment);
+router.post('/free-activate', paymentController.freeActivate);
 
 module.exports = router;

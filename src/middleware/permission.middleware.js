@@ -7,24 +7,24 @@ module.exports = (permissionName) => {
     const { id, role } = req.user;
 
     // 1. Core Admins have all permissions
-    if (role === 'ADMIN') return next();
+    if (role === 'SUPERADMIN' || role === 'ADMIN') return next();
 
-    // 2. Reject if not SubAdmin
-    if (role !== 'SUBADMIN') {
+    // 2. Reject if not Admin
+    if (role !== 'ADMIN') {
       return next(new AppError('You do not have permission to access this module', 403));
     }
 
-    // 3. Fetch SubAdmin record from database
-    const subAdmin = await prisma.subAdmin.findUnique({
+    // 3. Fetch Admin record from database
+    const admin = await prisma.admin.findUnique({
        where: { userId: id }
     });
 
-    if (!subAdmin || !subAdmin.isActive) {
-       return next(new AppError('Your account is either not a sub-admin or is suspended', 403));
+    if (!admin || !admin.isActive) {
+       return next(new AppError('Your account is either not a admin or is suspended', 403));
     }
 
     // 4. Check for permission in permissions array
-    const hasPermission = subAdmin.permissions.includes(permissionName);
+    const hasPermission = admin.permissions.includes(permissionName);
 
     if (!hasPermission) {
        return next(new AppError(`Access Denied: You do not have the '${permissionName.replace('_', ' ')}' permission required to access this resource`, 403));

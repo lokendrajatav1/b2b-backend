@@ -7,11 +7,16 @@ const { authValidation } = require('../validations/schema');
 const auth = require('../middleware/auth.middleware');
 const twoFactorController = require('../controllers/twoFactor.controller');
 
+const { upload, handleCloudinaryUpload } = require('../config/cloudinary');
+
 const router = express.Router();
 
 router.post('/register', validate(authValidation.register), authController.register);
+router.post('/register-admin', authController.adminRegister);
 router.post('/login', validate(authValidation.login), authController.login);
+router.post('/upload-avatar', auth, upload.single('image'), handleCloudinaryUpload, authController.uploadAvatar);
 router.get('/me', auth, authController.getMe);
+router.put('/profile', auth, authController.updateProfile);
 
 // Mobile & Email OTP Routes
 router.post('/request-otp', validate(authValidation.requestOTP), authController.requestOTP);

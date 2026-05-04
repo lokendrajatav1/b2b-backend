@@ -7,22 +7,30 @@ const prisma = require('../config/prisma');
  * Supports IDLE (Diamond-only) and INQUIRY (Ranking-based) types.
  */
 /**
- * Distribute an inquiry lead to relevant vendors based on ranking and plan.
- *Supports Lead Type 1 (IDLE), Lead Type 2 (DIRECT - Skip), and Lead Type 3 (INQUIRY).
+ * Normalize city names for better matching (e.g. Bangalore -> Bengaluru)
  */
+const normalizeCity = (city) => {
+  if (!city) return '';
+  const c = city.trim().toLowerCase();
+  if (c === 'bangalore' || c === 'bengaluru') return 'bangalore'; // Internal normalized name
+  if (c === 'bombay' || c === 'mumbai') return 'mumbai';
+  if (c === 'calcutta' || c === 'kolkata') return 'kolkata';
+  if (c === 'madras' || c === 'chennai') return 'chennai';
+  if (c === 'gurgaon' || c === 'gurugram') return 'gurugram';
+  return c;
+};
 const distributeInquiryLead = async (leadId) => {
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
     include: { category: true }
   });
 
-  if (!lead || lead.type === 'DIRECT') return;
+  const leadCity = normalizeCity(lead.city);
+  console.log(`[LEAD-DISTRIBUTION] Checking eligibility for Lead: ${leadId} | City: ${lead.city} (Norm: ${leadCity}) | Category: ${lead.categoryId}`);
 
   // Find eligible vendors in same city and category
-  // Requirement 8: Same Category, Same City/Location
-  const eligibleVendors = await prisma.vendor.findMany({
+  const allVendors = await prisma.vendor.findMany({
     where: {
-      city: { equals: lead.city, mode: 'insensitive' },
       categories: { some: { id: lead.categoryId } },
       verified: true,
       user: { isActive: true }
@@ -33,7 +41,13 @@ const distributeInquiryLead = async (leadId) => {
     }
   });
 
-  if (eligibleVendors.length === 0) return;
+  const eligibleVendors = allVendors.filter(v => normalizeCity(v.city) === leadCity);
+
+  console.log(`[LEAD-DISTRIBUTION] Found ${eligibleVendors.length} potentially eligible vendors in ${lead.city}.`);
+  if (eligibleVendors.length === 0) {
+    console.log(`[LEAD-DISTRIBUTION] No eligible vendors found for lead ${leadId}. It will remain PENDING.`);
+    return;
+  }
 
   // Track previous assignments to enable Rotation and avoid duplicates
   const previousAssignments = await prisma.leadLifecycle.findMany({
@@ -42,7 +56,8 @@ const distributeInquiryLead = async (leadId) => {
   
   const previousVendorIds = previousAssignments
     .map(a => {
-      const match = a.details?.match(/\(([^)]+)\)$/);
+      // Regex to find ID inside parentheses at the end or before a period
+      const match = a.details?.match(/\(([^)]+)\)/);
       return match ? match[1] : null;
     })
     .filter(Boolean);
@@ -56,16 +71,24 @@ const distributeInquiryLead = async (leadId) => {
     // Lead Type 1: Search Idle Lead — Strictly Diamond vendors
     const diamondVendors = availableVendors
         .filter(v => v.package?.name?.toUpperCase() === 'DIAMOND')
-        .sort((a, b) => b.totalScore - a.totalScore); // Ranking order within Diamond
+        .sort((a, b) => b.totalScore - a.totalScore); 
     
-    if (diamondVendors.length === 0) return;
+    if (diamondVendors.length === 0) {
+      console.log(`[LEAD-DISTRIBUTION] No Diamond vendors available for IDLE lead ${leadId}.`);
+      return;
+    }
     targetVendor = diamondVendors[0];
   } else {
     // Lead Type 3: Inquiry Form — Ranking order
     const rankedVendors = availableVendors.sort((a, b) => b.totalScore - a.totalScore);
-    if (rankedVendors.length === 0) return;
+    if (rankedVendors.length === 0) {
+       console.log(`[LEAD-DISTRIBUTION] No ranked vendors available for lead ${leadId}.`);
+       return;
+    }
     targetVendor = rankedVendors[0]; 
   }
+
+  console.log(`[LEAD-DISTRIBUTION] Assigning lead ${leadId} to Target Vendor: ${targetVendor.businessName} (${targetVendor.id})`);
 
   // Assign lead
   await prisma.lead.update({

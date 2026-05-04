@@ -13,7 +13,7 @@ router.post('/request', restrictTo('VENDOR'), refundController.requestRefund);
 router.get('/my-refunds', restrictTo('VENDOR'), refundController.getMyRefunds);
 
 // Admin routes
-router.get('/admin/all', restrictTo('ADMIN'), refundController.getAllRefunds);
-router.patch('/admin/:id', restrictTo('ADMIN'), refundController.updateRefundStatus);
+router.get('/admin/all', restrictTo('SUPERADMIN'), refundController.getAllRefunds);
+router.patch('/admin/:id', restrictTo('SUPERADMIN'), refundController.updateRefundStatus);
 
 module.exports = router;

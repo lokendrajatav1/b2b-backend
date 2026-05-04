@@ -3,6 +3,7 @@ const ApiResponse = require('../utils/ApiResponse');
 const prisma = require('../config/prisma');
 const AppError = require('../utils/AppError');
 const cacheService = require('../services/cache.service');
+const notificationService = require('../services/notification.service');
 const { logAction } = require('../utils/auditLogger');
 const { decrypt } = require('../utils/encryption');
 
@@ -40,6 +41,9 @@ exports.approveVendor = catchAsync(async (req, res, next) => {
   const leadService = require('../services/lead.service');
   await leadService.recalculateRankings(vendorId);
   await cacheService.clearCacheByPrefix('search:vendors');
+
+  // Notify vendor
+  await notificationService.notifyVendorApproval(vendor, req.user.role);
 
   res.status(200).json(new ApiResponse(200, vendor, "Vendor approved successfully"));
 });
@@ -110,9 +114,28 @@ exports.rejectVendor = catchAsync(async (req, res, next) => {
  * Get all vendors awaiting verification
  */
 exports.getPendingVendors = catchAsync(async (req, res, next) => {
-  const { search, city, status } = req.query;
+  const { search, city, status, timeRange } = req.query;
+  const { id, role } = req.user;
   
   const where = {};
+
+  // Hub-based filtering removed for global access
+  /*
+  if (role === 'ADMIN') {
+    const admin = await prisma.admin.findUnique({ where: { userId: id } });
+    if (admin && admin.categoryIds?.length > 0) {
+      where.categories = { some: { name: { in: admin.categoryIds } } };
+    }
+  }
+  */
+  
+  if (timeRange && ['weekly', 'monthly', 'yearly'].includes(timeRange)) {
+    const startDate = new Date();
+    if (timeRange === 'weekly') startDate.setDate(startDate.getDate() - 7);
+    if (timeRange === 'monthly') startDate.setMonth(startDate.getMonth() - 1);
+    if (timeRange === 'yearly') startDate.setFullYear(startDate.getFullYear() - 1);
+    where.createdAt = { gte: startDate };
+  }
   
   if (status === 'VERIFIED') {
     where.verified = true;
@@ -169,9 +192,20 @@ exports.getPendingVendors = catchAsync(async (req, res, next) => {
  */
 exports.getAllUsers = catchAsync(async (req, res, next) => {
   const { role, isActive, search, page = 1, limit = 1000 } = req.query;
+  const { id, role: userRole } = req.user;
   const skip = (page - 1) * limit;
 
   const where = {};
+
+  // Hub-based filtering removed for global access
+  /*
+  if (userRole === 'ADMIN') {
+    const admin = await prisma.admin.findUnique({ where: { userId: id } });
+    if (admin && admin.categoryIds?.length > 0) {
+      where.vendor = { categories: { some: { name: { in: admin.categoryIds } } } };
+    }
+  }
+  */
   if (role) where.role = role;
   if (isActive !== undefined) where.isActive = isActive === 'true';
   if (search) {
@@ -185,7 +219,7 @@ exports.getAllUsers = catchAsync(async (req, res, next) => {
     where,
     include: { 
       vendor: { include: { products: true, keywords: true, categories: true } },
-      subAdmin: true
+      admin: true
     },
 
     skip: parseInt(skip),
@@ -227,7 +261,7 @@ exports.deleteUser = catchAsync(async (req, res, next) => {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { vendor: true, subAdmin: true }
+    include: { vendor: true, admin: true }
   });
 
   if (!user) return next(new AppError('User not found', 404));
@@ -254,9 +288,9 @@ exports.deleteUser = catchAsync(async (req, res, next) => {
     await prisma.vendor.delete({ where: { id: vendorId } });
   }
 
-  // 3. Handle Sub-Admin specific data deletion
-  if (user.role === 'SUBADMIN' && user.subAdmin) {
-    await prisma.subAdmin.delete({ where: { userId: user.id } });
+  // 3. Handle admin specific data deletion
+  if (user.role === 'ADMIN' && user.admin) {
+    await prisma.admin.delete({ where: { userId: user.id } });
   }
 
   // 4. Delete the User record itself
@@ -299,23 +333,36 @@ exports.getVendorSecureDetails = catchAsync(async (req, res, next) => {
 exports.reassignLead = catchAsync(async (req, res, next) => {
   const { leadId } = req.params;
   const { vendorId } = req.body;
+  console.log("[DEBUG-REASSIGN] Reassigning Lead:", leadId, "to Vendor:", vendorId);
 
   const lead = await prisma.lead.update({
     where: { id: leadId },
     data: { vendorId, status: 'DISTRIBUTED' },
-    include: { vendor: { include: { categories: true } } }
+    include: { vendor: { include: { categories: true, user: true } } }
   });
 
   await prisma.leadLifecycle.create({
     data: {
       leadId,
-      action: 'REASSIGNED_BY_ADMIN',
-      details: `Admin manually reassigned lead to vendor ${lead.vendor.businessName}`
+      action: 'DISTRIBUTED', // Using DISTRIBUTED so the rotation logic picks it up
+      details: `Admin manually reassigned lead to vendor ${lead.vendor.businessName} (${lead.vendor.id})`
+    }
+  });
+
+  // Create In-App Notification
+  await prisma.notification.create({
+    data: {
+      userId: lead.vendor.userId,
+      title: 'New Priority Lead! 🚀',
+      message: `Admin has assigned a new lead from ${lead.buyerName} to you.`
     }
   });
 
   // Create Audit Log
   await logAction(req.user.id, 'REASSIGN_LEAD', 'LEAD', `Reassigned lead ${leadId} to vendor ${lead.vendor.businessName}`, req.ip);
+
+  // Notify vendor
+  await notificationService.notifyLeadAssignment(lead.vendor, lead, req.user.role);
 
   res.status(200).json(new ApiResponse(200, lead, "Lead reassigned successfully"));
 });
@@ -351,14 +398,18 @@ exports.getAllPackages = catchAsync(async (req, res, next) => {
 });
 
 exports.createPackage = catchAsync(async (req, res, next) => {
-  const { name, price, monthlyLeads, priority } = req.body;
+  const { name, price, monthlyLeads, priority, description, features } = req.body;
+
+  if (!name || price === undefined) return next(new AppError('Name and price are required', 400));
 
   const pkg = await prisma.package.create({
     data: {
       name,
-      price: parseFloat(price),
-      monthlyLeads: parseInt(monthlyLeads),
-      priority: parseInt(priority)
+      price:        parseFloat(price),
+      monthlyLeads: parseInt(monthlyLeads) || 0,
+      priority:     parseInt(priority)     || 1,
+      description:  description || null,
+      features:     Array.isArray(features) ? features : [],
     }
   });
 
@@ -367,15 +418,17 @@ exports.createPackage = catchAsync(async (req, res, next) => {
 
 exports.updatePackage = catchAsync(async (req, res, next) => {
   const { packageId } = req.params;
-  const { name, price, monthlyLeads, priority } = req.body;
+  const { name, price, monthlyLeads, priority, description, features } = req.body;
 
   const pkg = await prisma.package.update({
     where: { id: packageId },
     data: {
       name,
-      price: price !== undefined ? parseFloat(price) : undefined,
-      monthlyLeads: monthlyLeads !== undefined ? parseInt(monthlyLeads) : undefined,
-      priority: priority !== undefined ? parseInt(priority) : undefined
+      price:        price        !== undefined ? parseFloat(price)        : undefined,
+      monthlyLeads: monthlyLeads !== undefined ? parseInt(monthlyLeads)   : undefined,
+      priority:     priority     !== undefined ? parseInt(priority)       : undefined,
+      description:  description  !== undefined ? description              : undefined,
+      features:     features     !== undefined ? (Array.isArray(features) ? features : []) : undefined,
     }
   });
 
@@ -436,6 +489,28 @@ exports.suspendVendor = catchAsync(async (req, res, next) => {
  * Comprehensive Analytics
  */
 exports.getAnalytics = catchAsync(async (req, res, next) => {
+  const { timeRange } = req.query;
+  const { id, role } = req.user;
+
+  let contextWhere = {};
+  let adminInfo = null;
+
+  if (role === 'ADMIN') {
+    adminInfo = await prisma.admin.findUnique({ where: { userId: id } });
+    if (adminInfo && adminInfo.categoryIds?.length > 0) {
+      contextWhere = { categories: { some: { name: { in: adminInfo.categoryIds } } } };
+    }
+  }
+
+  let dateFilter = {};
+  if (timeRange && ['weekly', 'monthly', 'yearly'].includes(timeRange)) {
+    const startDate = new Date();
+    if (timeRange === 'weekly') startDate.setDate(startDate.getDate() - 7);
+    if (timeRange === 'monthly') startDate.setMonth(startDate.getMonth() - 1);
+    if (timeRange === 'yearly') startDate.setFullYear(startDate.getFullYear() - 1);
+    dateFilter = { createdAt: { gte: startDate } };
+  }
+
   const [
     totalLeads,
     totalVendors,
@@ -444,28 +519,82 @@ exports.getAnalytics = catchAsync(async (req, res, next) => {
     activeSubscribers,
     pendingVendors,
     pendingOfferings,
+    totalProducts,
     recentLeads,
     leadsByStatus,
     vendorKeywords,
-    leadLocations
+    leadLocations,
+    recentTransactions
   ] = await Promise.all([
-    prisma.lead.count(),
-    prisma.vendor.count({ where: { verified: true } }),
-    prisma.user.count(),
+    prisma.lead.count({ 
+      where: { 
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { category: { name: { in: adminInfo.categoryIds } } } : {})
+      } 
+    }),
+    prisma.vendor.count({ 
+      where: { 
+        verified: true, 
+        ...dateFilter,
+        ...contextWhere
+      } 
+    }),
+    prisma.user.count({ 
+      where: { 
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { vendor: { categories: { some: { name: { in: adminInfo.categoryIds } } } } } : {})
+      } 
+    }),
     prisma.transaction.aggregate({
-      where: { status: 'COMPLETED' },
+      where: { 
+        status: 'COMPLETED', 
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { vendor: { categories: { some: { name: { in: adminInfo.categoryIds } } } } } : {})
+      },
       _sum: { amount: true }
     }),
-    prisma.vendor.count({ where: { packageId: { not: null } } }),
-    prisma.vendor.count({ where: { verified: false } }),
-    prisma.product.count({ where: { status: 'PENDING' } }),
+    prisma.vendor.count({ 
+      where: { 
+        packageId: { not: null }, 
+        ...dateFilter,
+        ...contextWhere
+      } 
+    }),
+    prisma.vendor.count({ 
+      where: { 
+        verified: false, 
+        ...dateFilter,
+        ...contextWhere
+      } 
+    }),
+    prisma.product.count({ 
+      where: { 
+        status: 'PENDING', 
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { vendor: { categories: { some: { name: { in: adminInfo.categoryIds } } } } } : {})
+      } 
+    }),
+    prisma.product.count({ 
+      where: {
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { vendor: { categories: { some: { name: { in: adminInfo.categoryIds } } } } } : {})
+      }
+    }),
     prisma.lead.findMany({
-      take: 5,
+      take: 10,
+      where: {
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { category: { name: { in: adminInfo.categoryIds } } } : {})
+      },
       orderBy: { createdAt: 'desc' },
       include: { vendor: { select: { businessName: true } } }
     }),
     prisma.lead.groupBy({
       by: ['status'],
+      where: {
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { category: { name: { in: adminInfo.categoryIds } } } : {})
+      },
       _count: { id: true }
     }),
     // 3. Top Keywords (Insights snippet)
@@ -477,17 +606,58 @@ exports.getAnalytics = catchAsync(async (req, res, next) => {
     // 4. City Rankings (Location snippet)
     prisma.lead.groupBy({
       by: ['city'],
+      where: {
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { category: { name: { in: adminInfo.categoryIds } } } : {})
+      },
       _count: { id: true },
       orderBy: { _count: { city: 'desc' } },
       take: 5
+    }),
+    // 5. Revenue Trends
+    prisma.transaction.findMany({
+      where: { 
+        status: 'COMPLETED',
+        ...dateFilter,
+        ...(role === 'ADMIN' && adminInfo?.categoryIds?.length > 0 ? { vendor: { categories: { some: { name: { in: adminInfo.categoryIds } } } } } : {})
+      },
+      select: { amount: true, createdAt: true },
+      orderBy: { createdAt: 'asc' }
     })
   ]);
+
+  // Process monthly revenue trends
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const revenueTrends = [];
+  
+  // Initialize with last 6 months
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    revenueTrends.push({
+      name: monthNames[d.getMonth()],
+      revenue: 0,
+      timestamp: d.getTime()
+    });
+  }
+
+  // Aggregate transaction data into months
+  const transactions = recentTransactions; 
+  transactions.forEach(tx => {
+    const txDate = new Date(tx.createdAt);
+    const txMonth = monthNames[txDate.getMonth()];
+    const trendPoint = revenueTrends.find(tp => tp.name === txMonth);
+    if (trendPoint) {
+      trendPoint.revenue += tx.amount || 0;
+    }
+  });
 
   res.status(200).json(new ApiResponse(200, {
     summary: {
       totalLeads,
       totalVendors,
       totalUsers,
+      totalProducts,
       totalRevenue: totalRevenue._sum.amount || 0,
       activeSubscribers,
       pendingVendors,
@@ -497,8 +667,13 @@ exports.getAnalytics = catchAsync(async (req, res, next) => {
     recentLeads,
     trends: {
       topKeywords: vendorKeywords.map(k => ({ name: k.name, count: k._count.vendors })),
-      topLocations: leadLocations.map(l => ({ name: l.city, count: l._count.id }))
-    }
+      topLocations: leadLocations.map(l => ({ name: l.city, count: l._count.id })),
+      revenueTrends: revenueTrends.map(({ name, revenue }) => ({ name, revenue }))
+    },
+    hubInfo: role === 'ADMIN' ? {
+      name: adminInfo?.hubName || adminInfo?.department || 'Regional Hub',
+      categories: adminInfo?.categoryIds || []
+    } : null
   }, "Full platform analytics dataset retrieved"));
 });
 
@@ -680,7 +855,12 @@ exports.getSettings = catchAsync(async (req, res, next) => {
   if (!settings) {
     return res.status(200).json(new ApiResponse(200, {
       rankingWeightProfile: 0.4,
-      rankingWeightPerformance: 0.6
+      rankingWeightPerformance: 0.6,
+      marketplaceId: "B2B-INDIA-ROOT-01",
+      hubName: "Mumbai Central",
+      alertVendorOnboarding: true,
+      alertPaymentExceptions: true,
+      alertInquirySpikes: false
     }));
   }
   
@@ -688,19 +868,41 @@ exports.getSettings = catchAsync(async (req, res, next) => {
 });
 
 exports.updateSettings = catchAsync(async (req, res, next) => {
-  const { rankingWeightProfile, rankingWeightPerformance } = req.body;
+  const { 
+    rankingWeightProfile, 
+    rankingWeightPerformance, 
+    marketplaceId, 
+    hubName, 
+    alertVendorOnboarding, 
+    alertPaymentExceptions, 
+    alertInquirySpikes 
+  } = req.body;
+
+  const updateData = {
+    rankingWeightProfile: rankingWeightProfile !== undefined ? parseFloat(rankingWeightProfile) : undefined,
+    rankingWeightPerformance: rankingWeightPerformance !== undefined ? parseFloat(rankingWeightPerformance) : undefined,
+    marketplaceId,
+    hubName,
+    alertVendorOnboarding: alertVendorOnboarding !== undefined ? Boolean(alertVendorOnboarding) : undefined,
+    alertPaymentExceptions: alertPaymentExceptions !== undefined ? Boolean(alertPaymentExceptions) : undefined,
+    alertInquirySpikes: alertInquirySpikes !== undefined ? Boolean(alertInquirySpikes) : undefined,
+  };
+
+  const createData = {
+    id: 'global',
+    rankingWeightProfile: rankingWeightProfile !== undefined ? parseFloat(rankingWeightProfile) : 0.4,
+    rankingWeightPerformance: rankingWeightPerformance !== undefined ? parseFloat(rankingWeightPerformance) : 0.6,
+    marketplaceId: marketplaceId || "B2B-INDIA-ROOT-01",
+    hubName: hubName || "Mumbai Central",
+    alertVendorOnboarding: alertVendorOnboarding !== undefined ? Boolean(alertVendorOnboarding) : true,
+    alertPaymentExceptions: alertPaymentExceptions !== undefined ? Boolean(alertPaymentExceptions) : true,
+    alertInquirySpikes: alertInquirySpikes !== undefined ? Boolean(alertInquirySpikes) : false,
+  };
 
   const settings = await prisma.systemSettings.upsert({
     where: { id: 'global' },
-    update: {
-      rankingWeightProfile: parseFloat(rankingWeightProfile),
-      rankingWeightPerformance: parseFloat(rankingWeightPerformance)
-    },
-    create: {
-      id: 'global',
-      rankingWeightProfile: parseFloat(rankingWeightProfile) || 0.4,
-      rankingWeightPerformance: parseFloat(rankingWeightPerformance) || 0.6
-    }
+    update: updateData,
+    create: createData
   });
 
   res.status(200).json(new ApiResponse(200, settings, "Platform settings updated successfully"));
@@ -716,6 +918,15 @@ exports.getPendingOfferings = catchAsync(async (req, res, next) => {
   const where = {};
   if (status && status !== 'ALL') where.status = status;
   if (type) where.type = type;
+
+  // Hub-based filtering for admins
+  const { id, role: userRole } = req.user;
+  if (userRole === 'ADMIN') {
+    const admin = await prisma.admin.findUnique({ where: { userId: id } });
+    if (admin && admin.categoryIds?.length > 0) {
+      where.vendor = { categories: { some: { name: { in: admin.categoryIds } } } };
+    }
+  }
   if (search) {
     where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
@@ -757,7 +968,7 @@ exports.approveOffering = catchAsync(async (req, res, next) => {
   const offering = await prisma.product.update({
     where: { id: offeringId },
     data: { status: 'APPROVED' },
-    include: { vendor: { select: { userId: true, businessName: true } } }
+    include: { vendor: { select: { userId: true, businessName: true, email: true, user: true } } }
   });
 
   // Notify vendor
@@ -774,6 +985,9 @@ exports.approveOffering = catchAsync(async (req, res, next) => {
 
   // Invalidate search cache
   await cacheService.clearCacheByPrefix('search:vendors');
+
+  // Notify vendor via Email
+  await notificationService.notifyProductApproval(offering.vendor, offering, req.user.role);
 
   res.status(200).json(new ApiResponse(200, offering, "Offering approved"));
 });
@@ -856,6 +1070,11 @@ exports.editOffering = catchAsync(async (req, res, next) => {
     });
   }
 
+  // Notify vendor if status changed to approved
+  if (status === 'APPROVED') {
+    await notificationService.notifyProductApproval(offering.vendor, offering, req.user.role);
+  }
+
   res.status(200).json(new ApiResponse(200, offering, "Offering updated successfully"));
 });
 
@@ -905,7 +1124,7 @@ exports.broadcastNotification = catchAsync(async (req, res, next) => {
   let where = {};
   if (target === 'ALL_VENDORS') where.role = 'VENDOR';
   else if (target === 'ALL_BUYERS') where.role = 'BUYER';
-  else if (target === 'SUBADMIN') where.role = 'SUBADMIN';
+  else if (target === 'ADMIN') where.role = 'ADMIN';
 
   const users = await prisma.user.findMany({ 
     where: {
@@ -933,9 +1152,7 @@ exports.broadcastNotification = catchAsync(async (req, res, next) => {
   res.status(200).json(new ApiResponse(200, null, "Broadcast signal transmitted successfully"));
 });
 
-/**
- * Activity Logs / History (Main Admin only)
- */
+// getActivityLogs
 exports.getActivityLogs = catchAsync(async (req, res, next) => {
   const { page = 1, limit = 20, module, action } = req.query;
   const skip = (page - 1) * limit;

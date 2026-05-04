@@ -17,7 +17,7 @@ router.post('/match-with-you', validate(leadValidation.createLead), leadControll
 router.get('/my-leads', auth, restrictTo('VENDOR'), leadController.getVendorLeads);
 
 // Protected: Admin views specific vendor leads
-router.get('/vendor-leads/:vendorId', auth, restrictTo('ADMIN'), leadController.getVendorLeads);
+router.get('/vendor-leads/:vendorId', auth, restrictTo('SUPERADMIN'), leadController.getVendorLeads);
 router.patch('/:leadId/status', auth, restrictTo('VENDOR'), validate(leadValidation.updateLeadStatus), leadController.updateLeadStatus);
 
 module.exports = router;

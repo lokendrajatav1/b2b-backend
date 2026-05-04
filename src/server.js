@@ -1,4 +1,5 @@
 require("dotenv").config();
+console.log("[CRITICAL] SERVER.JS IS STARTING - TIMESTAMP: " + Date.now());
 
 const express = require("express");
 const cors = require("cors");
@@ -26,11 +27,30 @@ if (process.env.NODE_ENV !== 'test') {
 
 const app = express();
 
-// 1. SECURITY MIDDLEWARE
+// 1. GLOBAL ACCESS
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
+const { upload, handleCloudinaryUpload } = require('./config/cloudinary');
+const auth = require('./middleware/auth.middleware');
+const authController = require('./controllers/auth.controller');
+
+// ✅ CORRECT ROUTE
+app.post(
+  '/api/avatar-upload',
+  auth,
+  upload.single('image'),
+  handleCloudinaryUpload,
+  authController.uploadAvatar
+);
+
+// 2. SECURITY MIDDLEWARE
 app.use(helmet()); // Security Headers (XSS, Clickjacking, etc.)
 app.use(hpp());    // Prevent HTTP Parameter Pollution
 
-// Rate Limiting: Max 100 requests per 15 minutes from an IP
+// Rate Limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -38,14 +58,8 @@ const limiter = rateLimit({
 });
 app.use("/api", limiter);
 
-// 2. PERFORMANCE MIDDLEWARE
-app.use(compression()); // Gzip compression for faster load times
-
-// 3. CORS & DATA PARSING
-app.use(cors({
-  origin: true, // Mirror the request origin to allow all sources in DEV
-  credentials: true
-}));
+// 3. PERFORMANCE & DATA PARSING
+app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -62,7 +76,8 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/refunds", require("./routes/refund.routes"));
-app.use("/api/subadmins", require("./routes/subadmin.routes"));
+app.use("/api/subadmins", require("./routes/staff.routes"));
+app.use("/api/settings", require("./routes/settings.routes"));
 
 // Public: Package listing
 app.get("/api/packages", packageController.getAllPackages);
@@ -77,8 +92,8 @@ app.get("/", (req, res) => {
 });
 
 // Handle undefined routes
-app.all('*path', (req, res, next) => {
-  next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
+app.use((req, res, next) => {
+  next(new AppError(`[SYNC-DEBUG-404] Can't find ${req.originalUrl} on this server!`, 404));
 });
 
 // Global Error Handler
@@ -87,7 +102,7 @@ app.use(globalErrorHandler);
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`[B2B-API-LOG] Server is running on port ${PORT} - VER-SYNC-1`);
   });
 }
 
