@@ -503,12 +503,35 @@ exports.getAnalytics = catchAsync(async (req, res, next) => {
   }
 
   let dateFilter = {};
-  if (timeRange && ['weekly', 'monthly', 'yearly'].includes(timeRange)) {
-    const startDate = new Date();
-    if (timeRange === 'weekly') startDate.setDate(startDate.getDate() - 7);
-    if (timeRange === 'monthly') startDate.setMonth(startDate.getMonth() - 1);
-    if (timeRange === 'yearly') startDate.setFullYear(startDate.getFullYear() - 1);
-    dateFilter = { createdAt: { gte: startDate } };
+  const { startDate, endDate } = req.query;
+
+  if (timeRange === 'today') {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    dateFilter = { createdAt: { gte: startOfDay, lte: endOfDay } };
+  } else if (timeRange === 'yesterday') {
+    const startOfYesterday = new Date();
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+    startOfYesterday.setHours(0, 0, 0, 0);
+    const endOfYesterday = new Date();
+    endOfYesterday.setDate(endOfYesterday.getDate() - 1);
+    endOfYesterday.setHours(23, 59, 59, 999);
+    dateFilter = { createdAt: { gte: startOfYesterday, lte: endOfYesterday } };
+  } else if (timeRange === 'custom' && startDate && endDate) {
+    dateFilter = { 
+      createdAt: { 
+        gte: new Date(startDate), 
+        lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)) 
+      } 
+    };
+  } else if (timeRange && ['weekly', 'monthly', 'yearly'].includes(timeRange)) {
+    const start = new Date();
+    if (timeRange === 'weekly') start.setDate(start.getDate() - 7);
+    if (timeRange === 'monthly') start.setMonth(start.getMonth() - 1);
+    if (timeRange === 'yearly') start.setFullYear(start.getFullYear() - 1);
+    dateFilter = { createdAt: { gte: start } };
   }
 
   const [
@@ -944,6 +967,7 @@ exports.getPendingOfferings = catchAsync(async (req, res, next) => {
             businessName: true,
             city: true,
             userId: true,
+            logoUrl: true,
             user: { select: { name: true, email: true } }
           }
         }
@@ -968,7 +992,7 @@ exports.approveOffering = catchAsync(async (req, res, next) => {
   const offering = await prisma.product.update({
     where: { id: offeringId },
     data: { status: 'APPROVED' },
-    include: { vendor: { select: { userId: true, businessName: true, email: true, user: true } } }
+    include: { vendor: { select: { userId: true, businessName: true, email: true, logoUrl: true, user: true } } }
   });
 
   // Notify vendor
@@ -1045,6 +1069,7 @@ exports.editOffering = catchAsync(async (req, res, next) => {
           businessName: true,
           city: true,
           userId: true,
+          logoUrl: true,
           user: { select: { name: true, email: true } }
         }
       }

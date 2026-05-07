@@ -81,7 +81,11 @@ exports.searchVendors = catchAsync(async (req, res, next) => {
   }
 
   if (city) {
-    where.city = { contains: city, mode: 'insensitive' };
+    const trimmedCity = city.trim();
+    // Use equals for strict city matching when a specific city is selected
+    // but keep contains if it's a multi-word search or for flexibility.
+    // Here we use contains but with a more focused approach.
+    where.city = { contains: trimmedCity, mode: 'insensitive' };
   }
   if (categoryId) {
     where.categories = {
@@ -138,8 +142,8 @@ exports.searchVendors = catchAsync(async (req, res, next) => {
     totalPages: Math.ceil(total / limit)
   };
 
-  // Set Cache (expires in 1 minute instead of 15 for better UI reactivity)
-  await cacheService.setCache(cacheKey, responseData, 60);
+  // Set Cache (expires in 10 seconds for better UI reactivity)
+  await cacheService.setCache(cacheKey, responseData, 10);
 
   res.status(200).json(new ApiResponse(200, responseData));
 });

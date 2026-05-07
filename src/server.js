@@ -79,8 +79,9 @@ app.use("/api/refunds", require("./routes/refund.routes"));
 app.use("/api/subadmins", require("./routes/staff.routes"));
 app.use("/api/settings", require("./routes/settings.routes"));
 
-// Public: Package listing
+// Public: Package and Category listing
 app.get("/api/packages", packageController.getAllPackages);
+app.get("/api/categories", require('./controllers/category.controller').getAllCategories);
 
 // Health Check
 app.get("/health", (req, res) => {
