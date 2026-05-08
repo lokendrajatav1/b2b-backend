@@ -51,7 +51,7 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
 // Get all admins
 exports.getAllAdmins = catchAsync(async (req, res, next) => {
   const subAdmins = await prisma.admin.findMany({
-    include: { user: { select: { isActive: true, role: true } } }
+    include: { user: { select: { isActive: true, role: true, avatar: true } } }
   });
 
   res.status(200).json(new ApiResponse(200, subAdmins));
