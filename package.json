@@ -15,10 +15,14 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@bull-board/api": "^7.0.0",
+    "@bull-board/express": "^7.0.0",
     "@prisma/client": "^6.4.1",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.76.8",
     "cloudinary": "^2.9.0",
     "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
     "cookie-session": "^2.1.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -47,7 +51,8 @@
     "speakeasy": "^2.0.0",
     "streamifier": "^0.1.1",
     "twilio": "^5.13.1",
-    "xss": "^1.0.15"
+    "xss": "^1.0.15",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "jest": "^30.3.0",

@@ -7,19 +7,59 @@ if (!process.env.REDIS_URL) {
   console.warn('⚠️  REDIS_URL is not set. Defaulting to localhost:6379');
 }
 
+let failureCount = 0;
+const MAX_SILENT_FAILURES = 10;
+
 const redis = new Redis(redisUrl, {
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: null,
+  connectTimeout: 10000,
+  keepAlive: 10000,
+  family: 4, // Force IPv4 to avoid potential IPv6 proxy issues
+  reconnectOnError: (err) => {
+    if (err.message.includes('READONLY') || err.message.includes('ECONNRESET')) {
+      return true; 
+    }
+    return false;
+  },
   retryStrategy(times) {
-    return Math.min(times * 100, 3000);
+    failureCount = times;
+    const delay = Math.min(times * 1000, 30000); // Slower retries to be gentle (up to 30s)
+    
+    if (times === 1) {
+      console.warn('⚠️  [REDIS] Connection lost. Attempting to reconnect...');
+    }
+    
+    if (times === MAX_SILENT_FAILURES) {
+      console.error('🛑 [REDIS] Remote connection failing repeatedly. Check your REDIS_URL or internet.');
+      console.log('💡 [TIP] Try using a local Redis: REDIS_URL=redis://localhost:6379');
+    }
+
+    return delay;
   }
 });
 
+let isConnected = false;
+
 redis.on('connect', () => {
-  console.log('✅ Redis client connected');
+  // Silent connecting
+});
+
+redis.on('ready', () => {
+  isConnected = true;
+  console.log('🚀 [REDIS] System Online');
+  failureCount = 0;
 });
 
 redis.on('error', (err) => {
-  console.error('❌ Redis Connection Error:', err.message);
+  isConnected = false;
+  // Only log unique errors to avoid spam
+  if (failureCount < 2) {
+    console.error('❌ [REDIS] Error:', err.message);
+  }
+});
+
+redis.on('close', () => {
+  isConnected = false;
 });
 
 /**
@@ -28,11 +68,11 @@ redis.on('error', (err) => {
  * @returns {Promise<any>}
  */
 const getCache = async (key) => {
+  if (!isConnected) return null;
   try {
     const data = await redis.get(key);
     return data ? JSON.parse(data) : null;
   } catch (err) {
-    console.error(`Cache GET error for key ${key}:`, err);
     return null;
   }
 };
@@ -44,11 +84,12 @@ const getCache = async (key) => {
  * @param {number} ttl - Time to live in seconds (default: 3600 = 1 hour)
  */
 const setCache = async (key, value, ttl = 3600) => {
+  if (!isConnected) return;
   try {
     const stringValue = JSON.stringify(value);
     await redis.set(key, stringValue, 'EX', ttl);
   } catch (err) {
-    console.error(`Cache SET error for key ${key}:`, err);
+    // Silent fail
   }
 };
 
@@ -57,10 +98,11 @@ const setCache = async (key, value, ttl = 3600) => {
  * @param {string} key - The cache key
  */
 const deleteCache = async (key) => {
+  if (!isConnected) return;
   try {
     await redis.del(key);
   } catch (err) {
-    console.error(`Cache DELETE error for key ${key}:`, err);
+    // Silent fail
   }
 };
 
