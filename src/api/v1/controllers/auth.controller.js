@@ -288,7 +288,9 @@ exports.requestOTP = catchAsync(async (req, res, next) => {
 
   console.log(`📱 [OTP REQUEST] FOR: ${phone} | CODE: ${otp}`);
 
-  res.status(200).json(new ApiResponse(200, null, "OTP transmitted successfully."));
+  res.status(200).json(new ApiResponse(200, { 
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined 
+  }, "OTP transmitted successfully."));
 });
 
 exports.requestEmailOTP = catchAsync(async (req, res, next) => {
@@ -323,7 +325,9 @@ exports.requestEmailOTP = catchAsync(async (req, res, next) => {
     html: `<h3>Verification Code</h3><p>Your code is: <b>${otp}</b></p>`
   }).catch(err => console.error("OTP email delivery failed:", err));
 
-  res.status(200).json(new ApiResponse(200, null, "Verification code sent to your inbox."));
+  res.status(200).json(new ApiResponse(200, {
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined
+  }, "Verification code sent to your inbox."));
 });
 
 exports.verifyOTPLogin = catchAsync(async (req, res, next) => {

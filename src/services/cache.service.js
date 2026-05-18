@@ -1,7 +1,7 @@
 const Redis = require('ioredis');
 
 // Initialize Redis Client
-const redisUrl = process.env.REDIS_URL ;
+const redisUrl = process.env.REDIS_URL;
 
 if (!process.env.REDIS_URL) {
   console.warn('⚠️  REDIS_URL is not set. Defaulting to localhost:6379');
@@ -17,18 +17,18 @@ const redis = new Redis(redisUrl, {
   family: 4, // Force IPv4 to avoid potential IPv6 proxy issues
   reconnectOnError: (err) => {
     if (err.message.includes('READONLY') || err.message.includes('ECONNRESET')) {
-      return true; 
+      return true;
     }
     return false;
   },
   retryStrategy(times) {
     failureCount = times;
     const delay = Math.min(times * 1000, 30000); // Slower retries to be gentle (up to 30s)
-    
+
     if (times === 1) {
       console.warn('⚠️  [REDIS] Connection lost. Attempting to reconnect...');
     }
-    
+
     if (times === MAX_SILENT_FAILURES) {
       console.error('🛑 [REDIS] Remote connection failing repeatedly. Check your REDIS_URL or internet.');
       console.log('💡 [TIP] Try using a local Redis: REDIS_URL=redis://localhost:6379');

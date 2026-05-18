@@ -11,18 +11,18 @@ module.exports = (permissionName) => {
 
     // 2. Fetch Admin record from database
     const admin = await prisma.admin.findUnique({
-       where: { userId: id }
+      where: { userId: id }
     });
 
     if (!admin || !admin.isActive) {
-       return next(new AppError('Your account is either not an admin or is suspended', 403));
+      return next(new AppError('Your account is either not an admin or is suspended', 403));
     }
 
     // 3. Check for permission in permissions array
     const hasPermission = admin.permissions.includes(permissionName);
 
     if (!hasPermission) {
-       return next(new AppError(`Access Denied: Missing '${permissionName}' permission`, 403));
+      return next(new AppError(`Access Denied: Missing '${permissionName}' permission`, 403));
     }
 
     next();

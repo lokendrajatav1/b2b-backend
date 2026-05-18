@@ -7,6 +7,7 @@ const auth = require('../middlewares/auth.middleware');
 const optionalAuth = require('../middlewares/optionalAuth.middleware');
 
 router.get('/search', vendorsController.searchVendors);
+router.get('/', vendorsController.searchVendors);
 router.get('/categories', vendorsController.getAllCategories);
 router.get('/cities', vendorsController.getCities);
 router.get('/:vendorId', optionalAuth, vendorsController.getVendorById);

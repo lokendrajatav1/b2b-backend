@@ -25,4 +25,15 @@ router.use("/admin", adminRoutes);
 router.use("/categories", categoryRoutes);
 router.use("/refunds", refundsRoutes);
 
+// Discovery / Trending Data (Public)
+router.get("/trending", (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      searches: ["Industrial Tools", "Textile Machinery", "Office Supplies", "Electronics", "Construction Material"],
+      locations: ["Indore", "Mumbai", "Delhi", "Ahmedabad", "Pune", "Jaipur"]
+    }
+  });
+});
+
 module.exports = router;
