@@ -153,7 +153,7 @@ exports.getVendorById = catchAsync(async (req, res, next) => {
 
 // Get My Profile
 exports.getMyProfile = catchAsync(async (req, res, next) => {
-  const vendor = await prisma.vendor.findUnique({
+  let vendor = await prisma.vendor.findUnique({
     where: { userId: req.user.id },
     include: { 
       package: true, 
@@ -164,6 +164,46 @@ exports.getMyProfile = catchAsync(async (req, res, next) => {
       categories: true
     }
   });
+
+  if (!vendor && req.user.role === 'VENDOR') {
+    const userRecord = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (userRecord) {
+      const basicPackage = await prisma.package.findFirst({
+        where: { name: 'Basic' }
+      });
+
+      const firstCategory = await prisma.category.findFirst();
+
+      vendor = await prisma.vendor.create({
+        data: {
+          userId: req.user.id,
+          businessName: userRecord.name || 'My Business',
+          email: userRecord.email || '',
+          phone: userRecord.phone || '',
+          city: 'Indore',
+          verified: true,
+          status: 'VERIFIED',
+          profileCompleteness: 50,
+          packageId: basicPackage ? basicPackage.id : null,
+          planExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+          categories: firstCategory ? {
+            connect: [{ id: firstCategory.id }]
+          } : undefined
+        },
+        include: {
+          package: true,
+          products: true,
+          keywords: true,
+          gallery: true,
+          certifications: true,
+          categories: true
+        }
+      });
+    }
+  }
 
   if (!vendor) return res.status(200).json(new ApiResponse(200, null, 'No vendor profile yet'));
 

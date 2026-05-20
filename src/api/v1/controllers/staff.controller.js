@@ -7,12 +7,13 @@ const { logAction } = require('../../../shared/helpers/auditLogger');
 
 const VALID_DEPARTMENTS = ['GENERAL', 'DATA_ENTRY', 'SALES', 'SUPPORT'];
 
-// Create admin (Only Main SUPERADMIN can do this)
+// Create admin (SUPERADMIN or ADMIN can do this)
 exports.createAdmin = catchAsync(async (req, res, next) => {
   const { name, email, password, permissions, department, hubName, categoryIds } = req.body;
+  const creatorRole = req.user.role;
 
   if (department && !VALID_DEPARTMENTS.includes(department)) {
-     return next(new AppError('Invalid department selected', 400));
+    return next(new AppError('Invalid department selected', 400));
   }
 
   let user = await prisma.user.findUnique({ where: { email } });
@@ -21,14 +22,23 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
   const salt = await bcrypt.genSalt(10);
   const hashedPassword = await bcrypt.hash(password, salt);
 
+  // If creator is ADMIN, the new user's role is SUBADMIN
+  const targetRole = creatorRole === 'ADMIN' ? 'SUBADMIN' : 'ADMIN';
+
   user = await prisma.user.create({
     data: {
       name,
       email,
       password: hashedPassword,
-      role: 'ADMIN'
+      role: targetRole
     }
   });
+
+  let createdById = null;
+  if (creatorRole === 'ADMIN') {
+    const creatorAdmin = await prisma.admin.findUnique({ where: { userId: req.user.id } });
+    if (creatorAdmin) createdById = creatorAdmin.id;
+  }
 
   const admin = await prisma.admin.create({
     data: {
@@ -38,19 +48,33 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
       department: department || 'GENERAL',
       hubName: hubName || null,
       categoryIds: categoryIds || [],
-      permissions: permissions || []
+      permissions: permissions || [],
+      createdById: createdById
     }
   });
 
   // Create Audit Log
-  await logAction(req.user.id, 'CREATE_ADMIN', 'ADMIN', `Created new admin: ${name} (${email})`, req.ip);
+  await logAction(req.user.id, 'CREATE_STAFF', targetRole, `Created new ${targetRole}: ${name} (${email})`, req.ip);
 
-  res.status(201).json(new ApiResponse(201, admin, 'admin created successfully'));
+  res.status(201).json(new ApiResponse(201, admin, `${targetRole} created successfully`));
 });
 
-// Get all admins
+// Get all admins (Filtered based on role)
 exports.getAllAdmins = catchAsync(async (req, res, next) => {
+  const { role, id } = req.user;
+  let where = {};
+
+  if (role === 'ADMIN') {
+    const creatorAdmin = await prisma.admin.findUnique({ where: { userId: id } });
+    where = { createdById: creatorAdmin ? creatorAdmin.id : 'none' };
+  } else if (role === 'SUPERADMIN') {
+    // SuperAdmin sees all ADMINs (who don't have a parent) ?
+    // Or just all admins. Let's say SuperAdmin sees all ADMIN role users.
+    where = { user: { role: 'ADMIN' } };
+  }
+
   const admins = await prisma.admin.findMany({
+    where,
     include: { user: { select: { isActive: true, role: true, avatar: true } } }
   });
 
@@ -63,7 +87,7 @@ exports.updateAdmin = catchAsync(async (req, res, next) => {
   const { permissions, isActive, department, hubName, categoryIds } = req.body;
 
   if (department && !VALID_DEPARTMENTS.includes(department)) {
-     return next(new AppError('Invalid department selected', 400));
+    return next(new AppError('Invalid department selected', 400));
   }
 
   const admin = await prisma.admin.findUnique({ where: { id } });

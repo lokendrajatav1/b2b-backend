@@ -12,14 +12,17 @@ module.exports = catchAsync(async (req, res, next) => {
   }
 
   if (!token) {
+    console.log('❌ Auth Middleware: No token found in headers');
     return next(new AppError("You are not logged in! Please log in to get access.", 401));
   }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log(`✅ Auth Middleware: Token verified for user ${decoded.id} with role ${decoded.role}`);
     req.user = decoded;
     next();
   } catch (err) {
+    console.log(`❌ Auth Middleware: Token verification failed - ${err.message}`);
     if (err.name === 'TokenExpiredError') {
       return next(new AppError("TOKEN_EXPIRED", 401));
     }

@@ -78,7 +78,10 @@ model Admin {
   updatedAt   DateTime @updatedAt
   categoryIds String[]
   hubName     String?
+  createdById String?
   user        User     @relation(fields: [userId], references: [id])
+  createdBy   Admin?   @relation("AdminToSubAdmin", fields: [createdById], references: [id])
+  subAdmins   Admin[]  @relation("AdminToSubAdmin")
 
   @@map("SubAdmin")
 }
@@ -337,6 +340,7 @@ model GlobalSettings {
 
 enum Role {
   ADMIN
+  SUBADMIN
   SUPERADMIN
   VENDOR
   BUYER
