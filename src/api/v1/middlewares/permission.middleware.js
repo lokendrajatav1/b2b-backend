@@ -10,6 +10,7 @@ const PERMISSION_MAP = {
   'manage_users': ['manage_users'],
   'view_leads': ['manage_leads'],
   'manage_leads': ['manage_leads'],
+  'manage_staff': ['manage_staff'],
   'manage_settings': ['manage_categories'],
   'view_transactions': ['verify_vendors', 'manage_users', 'manage_leads'],
   'view_analytics': ['verify_vendors', 'verify_products', 'manage_users', 'manage_leads', 'manage_categories']
@@ -21,6 +22,9 @@ module.exports = (permissionName) => {
 
     // 1. Core Admins (SUPERADMIN) have all permissions
     if (role === 'SUPERADMIN') return next();
+
+    // 2. Admins have MANAGE_STAFF permission by default to manage their team
+    if (role === 'ADMIN' && permissionName === 'MANAGE_STAFF') return next();
 
     // 2. Fetch Admin record from database
     const admin = await prisma.admin.findUnique({

@@ -19,6 +19,8 @@ router.get('/search', vendorsController.searchVendors);
 router.get('/', vendorsController.searchVendors);
 router.get('/categories', vendorsController.getAllCategories);
 router.get('/cities', vendorsController.getCities);
+router.get('/analytics/me', auth, vendorsController.getVendorAnalytics);
+
 router.get('/:vendorId', optionalAuth, vendorsController.getVendorById);
 
 router.post('/register', auth, validate(vendorsValidation.registerVendor), vendorsController.registerVendor);
