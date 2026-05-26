@@ -235,7 +235,7 @@ exports.getMyProfile = catchAsync(async (req, res, next) => {
 // Update Profile
 exports.updateMyProfile = catchAsync(async (req, res, next) => {
   const { 
-    businessName, description, address, 
+    businessName, description, address, phone, city,
     socialLinks, googleBusinessLink, workingHours,
     products, keywords, categoryIds, verificationDocument,
     gstNumber, aadhaarNumber, logoUrl
@@ -294,6 +294,8 @@ exports.updateMyProfile = catchAsync(async (req, res, next) => {
 
   const updateData = {};
   if (businessName !== undefined) updateData.businessName = businessName;
+  if (phone !== undefined && phone !== '') updateData.phone = phone;
+  if (city !== undefined) updateData.city = city;
   if (description !== undefined) updateData.description = description;
   if (address !== undefined) updateData.address = address;
   if (socialLinks !== undefined) updateData.socialLinks = socialLinks;

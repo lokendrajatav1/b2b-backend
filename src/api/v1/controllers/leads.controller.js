@@ -54,15 +54,23 @@ exports.createDirectLead = catchAsync(async (req, res, next) => {
     return next(new AppError('vendorId and actionType are required for direct leads', 400));
   }
 
-  const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } });
+  const vendor = await prisma.vendor.findUnique({ 
+    where: { id: vendorId },
+    include: { categories: true }
+  });
   if (!vendor) return next(new AppError('Vendor not found', 404));
+
+  const resolvedCategoryId = categoryId || vendor.categories?.[0]?.id;
+  if (!resolvedCategoryId) {
+    return next(new AppError('Vendor has no category to associate with the lead', 400));
+  }
 
   const lead = await prisma.lead.create({
     data: {
       buyerName: buyerName ? buyerName.split(' ').map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join(' ') : 'Anonymous Buyer',
       phone: phone || 'N/A',
       city: city || vendor.city,
-      categoryId: categoryId || vendor.categories?.[0]?.id,
+      categoryId: resolvedCategoryId,
       vendorId: vendorId, 
       message: bodyMessage || `DIRECT ${actionType}: Interested in your business. Buyer Phone: ${phone || 'N/A'}`,
       type: 'DIRECT',
