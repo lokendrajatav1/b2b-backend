@@ -19,6 +19,11 @@ router.delete('/reject-vendor/:vendorId', permission('APPROVE_VENDOR'), adminCon
 router.get('/vendors/pending', permission('VIEW_VENDORS'), adminController.getPendingVendors);
 router.get('/vendors/:vendorId/secure', permission('VIEW_VENDORS'), adminController.getVendorSecureDetails);
 
+// Add, Edit, Delete Vendors
+router.post('/vendors', permission('APPROVE_VENDOR'), adminController.createVendor);
+router.put('/vendors/:vendorId', permission('APPROVE_VENDOR'), adminController.editVendor);
+router.delete('/vendors/:vendorId', permission('APPROVE_VENDOR'), adminController.deleteVendor);
+
 // User Management
 router.get('/users', permission('VIEW_USERS'), adminController.getAllUsers);
 router.patch('/users/:userId', permission('MANAGE_USERS'), adminController.updateUserStatus);

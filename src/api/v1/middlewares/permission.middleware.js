@@ -26,6 +26,12 @@ module.exports = (permissionName) => {
     // 2. Admins have MANAGE_STAFF permission by default to manage their team
     if (role === 'ADMIN' && permissionName === 'MANAGE_STAFF') return next();
 
+    // Bypass vendor permissions for ADMIN and SUBADMIN to ensure seamless functionality
+    if ((role === 'SUBADMIN' || role === 'ADMIN') && 
+        (permissionName === 'VIEW_VENDORS' || permissionName === 'APPROVE_VENDOR' || permissionName === 'view_vendors' || permissionName === 'approve_vendor' || permissionName === 'VERIFY_VENDORS' || permissionName === 'verify_vendors')) {
+      return next();
+    }
+
     // 2. Fetch Admin record from database
     const admin = await prisma.admin.findUnique({
       where: { userId: id }

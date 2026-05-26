@@ -9,7 +9,7 @@ const VALID_DEPARTMENTS = ['GENERAL', 'DATA_ENTRY', 'SALES', 'SUPPORT'];
 
 // Create admin (SUPERADMIN or ADMIN can do this)
 exports.createAdmin = catchAsync(async (req, res, next) => {
-  const { name, email, password, permissions, department, hubName, categoryIds } = req.body;
+  const { name, email, password, permissions, department, hubName, categoryIds, role: requestedRole } = req.body;
   const creatorRole = req.user.role;
 
   if (department && !VALID_DEPARTMENTS.includes(department)) {
@@ -23,7 +23,10 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
   const hashedPassword = await bcrypt.hash(password, salt);
 
   // If creator is ADMIN, the new user's role is SUBADMIN
-  const targetRole = creatorRole === 'ADMIN' ? 'SUBADMIN' : 'ADMIN';
+  let targetRole = creatorRole === 'ADMIN' ? 'SUBADMIN' : 'ADMIN';
+  if (creatorRole === 'SUPERADMIN' && requestedRole) {
+    targetRole = requestedRole;
+  }
 
   user = await prisma.user.create({
     data: {
@@ -61,16 +64,16 @@ exports.createAdmin = catchAsync(async (req, res, next) => {
 
 // Get all admins (Filtered based on role)
 exports.getAllAdmins = catchAsync(async (req, res, next) => {
-  const { role, id } = req.user;
+  const { role } = req.user;
   let where = {};
 
   if (role === 'ADMIN') {
-    const creatorAdmin = await prisma.admin.findUnique({ where: { userId: id } });
-    where = { createdById: creatorAdmin ? creatorAdmin.id : 'none' };
+    // Admins manage all Sub-Admins in the system
+    where = { user: { role: 'SUBADMIN' } };
   } else if (role === 'SUPERADMIN') {
-    // SuperAdmin sees all ADMINs (who don't have a parent) ?
-    // Or just all admins. Let's say SuperAdmin sees all ADMIN role users.
-    where = { user: { role: 'ADMIN' } };
+    // SuperAdmin can filter by role, defaults to ADMIN
+    const queryRole = req.query.role || 'ADMIN';
+    where = { user: { role: queryRole } };
   }
 
   const admins = await prisma.admin.findMany({

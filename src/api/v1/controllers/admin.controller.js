@@ -5,7 +5,8 @@ const AppError = require("../../../shared/errors/app-error");
 const cacheService = require("../../../services/cache.service");
 const notificationService = require("../../../modules/notifications/notifications.service");
 const { logAction } = require("../../../shared/helpers/auditLogger");
-const { decrypt } = require("../../../shared/helpers/encryption");
+const { encrypt, decrypt } = require("../../../shared/helpers/encryption");
+const bcrypt = require("bcryptjs");
 
 /**
  * Vendor Approval
@@ -128,6 +129,205 @@ exports.rejectVendor = catchAsync(async (req, res, next) => {
   );
 
   res.status(200).json(new ApiResponse(200, null, "Vendor application rejected"));
+});
+
+exports.createVendor = catchAsync(async (req, res, next) => {
+  const {
+    name,
+    email,
+    phone,
+    password,
+    businessName,
+    city,
+    gstNumber,
+    aadhaarNumber,
+    categoryIds,
+    description,
+    address,
+    workingHours,
+    logoUrl,
+  } = req.body;
+
+  if (!name || !email || !password || !businessName || !city) {
+    return next(new AppError("Name, email, password, business name and city are required", 400));
+  }
+
+  // Check if user already exists
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email },
+        { phone }
+      ]
+    }
+  });
+
+  if (existingUser) {
+    return next(new AppError("User already exists with this email or phone", 400));
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const encryptedGst = gstNumber ? encrypt(gstNumber) : null;
+  const encryptedAadhaar = aadhaarNumber ? encrypt(aadhaarNumber) : null;
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Create User
+    const user = await tx.user.create({
+      data: {
+        name: name.split(' ').map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join(' '),
+        email,
+        phone,
+        password: hashedPassword,
+        role: "VENDOR",
+        isActive: true,
+        emailVerified: true,
+        phoneVerified: true
+      }
+    });
+
+    // 2. Create Vendor
+    const vendor = await tx.vendor.create({
+      data: {
+        userId: user.id,
+        businessName,
+        email,
+        phone,
+        gstNumber: encryptedGst,
+        aadhaarNumber: encryptedAadhaar,
+        city,
+        verified: true, // Auto-verified when added by Admin/Super Admin
+        status: "VERIFIED",
+        description: description || null,
+        address: address || null,
+        workingHours: workingHours || "9:00 AM - 6:00 PM",
+        logoUrl: logoUrl || null,
+        profileCompleteness: 50,
+        categories: {
+          connect: (categoryIds || []).map(id => ({ id }))
+        }
+      },
+      include: { categories: true }
+    });
+
+    return { user, vendor };
+  });
+
+  // Create Audit Log
+  await logAction(
+    req.user.id,
+    "CREATE_VENDOR",
+    "VENDOR",
+    `Created vendor: ${result.vendor.businessName} (User ID: ${result.user.id})`,
+    req.ip,
+  );
+
+  // Clear search cache
+  await cacheService.clearCacheByPrefix("search:vendors");
+
+  res.status(201).json(new ApiResponse(201, result.vendor, "Vendor created successfully"));
+});
+
+exports.editVendor = catchAsync(async (req, res, next) => {
+  const { vendorId } = req.params;
+  const {
+    name,
+    email,
+    phone,
+    password,
+    businessName,
+    city,
+    gstNumber,
+    aadhaarNumber,
+    categoryIds,
+    description,
+    address,
+    workingHours,
+    logoUrl,
+  } = req.body;
+
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    include: { user: true }
+  });
+
+  if (!vendor) {
+    return next(new AppError("Vendor not found", 404));
+  }
+
+  const encryptedGst = gstNumber ? encrypt(gstNumber) : null;
+  const encryptedAadhaar = aadhaarNumber ? encrypt(aadhaarNumber) : null;
+
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Update User
+    const userData = {};
+    if (name) userData.name = name;
+    if (email) userData.email = email;
+    if (phone) userData.phone = phone;
+    if (password) {
+      userData.password = await bcrypt.hash(password, 10);
+    }
+
+    const user = await tx.user.update({
+      where: { id: vendor.userId },
+      data: userData
+    });
+
+    // 2. Update Vendor
+    const vendorData = {
+      businessName,
+      city,
+      gstNumber: encryptedGst,
+      aadhaarNumber: encryptedAadhaar,
+      description: description || null,
+      address: address || null,
+      workingHours: workingHours || null,
+      logoUrl: logoUrl || null
+    };
+
+    if (email) vendorData.email = email;
+    if (phone) vendorData.phone = phone;
+
+    if (categoryIds && Array.isArray(categoryIds)) {
+      vendorData.categories = {
+        set: [],
+        connect: categoryIds.map(id => ({ id }))
+      };
+    }
+
+    const updatedVendor = await tx.vendor.update({
+      where: { id: vendorId },
+      data: vendorData,
+      include: { categories: true }
+    });
+
+    return { user, vendor: updatedVendor };
+  });
+
+  // Create Audit Log
+  await logAction(
+    req.user.id,
+    "UPDATE_VENDOR",
+    "VENDOR",
+    `Updated vendor: ${result.vendor.businessName}`,
+    req.ip,
+  );
+
+  // Clear search cache
+  await cacheService.clearCacheByPrefix("search:vendors");
+
+  res.status(200).json(new ApiResponse(200, result.vendor, "Vendor updated successfully"));
+});
+
+exports.deleteVendor = catchAsync(async (req, res, next) => {
+  const { vendorId } = req.params;
+  const vendor = await prisma.vendor.findUnique({
+    where: { id: vendorId }
+  });
+  if (!vendor) return next(new AppError("Vendor not found", 404));
+
+  // Map to deleteUser
+  req.params.userId = vendor.userId;
+  return exports.deleteUser(req, res, next);
 });
 
 /**
@@ -1101,13 +1301,47 @@ exports.getLocationAnalytics = catchAsync(async (req, res, next) => {
  * Lead Monitoring (List View)
  */
 exports.getAllLeads = catchAsync(async (req, res, next) => {
-  const { status, city, categoryId, page = 1, limit = 10 } = req.query;
+  const { status, city, categoryId, timeRange, startDate, endDate, page = 1, limit = 100 } = req.query;
   const skip = (page - 1) * limit;
 
   const where = {};
-  if (status) where.status = status;
+  if (status && status !== "ALL") where.status = status;
   if (city) where.city = { contains: city, mode: "insensitive" };
   if (categoryId) where.categoryId = categoryId;
+
+  if (timeRange && timeRange !== "ALL") {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    if (timeRange === "today") {
+      where.createdAt = { gte: start, lte: end };
+    } else if (timeRange === "yesterday") {
+      const yesterday = new Date(start);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayEnd = new Date(end);
+      yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+      where.createdAt = { gte: yesterday, lte: yesterdayEnd };
+    } else if (timeRange === "weekly") {
+      const weekAgo = new Date(start);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      where.createdAt = { gte: weekAgo, lte: end };
+    } else if (timeRange === "monthly") {
+      const monthAgo = new Date(start);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      where.createdAt = { gte: monthAgo, lte: end };
+    } else if (timeRange === "yearly") {
+      const yearAgo = new Date(start);
+      yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+      where.createdAt = { gte: yearAgo, lte: end };
+    } else if (timeRange === "custom" && startDate && endDate) {
+      where.createdAt = {
+        gte: new Date(startDate),
+        lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+    }
+  }
 
   const [leads, total] = await Promise.all([
     prisma.lead.findMany({

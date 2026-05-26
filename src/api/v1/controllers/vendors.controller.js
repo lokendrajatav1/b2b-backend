@@ -65,26 +65,42 @@ exports.searchVendors = catchAsync(async (req, res, next) => {
   const { city, categoryId, search, offeringType, verified, page = 1, limit = 10 } = req.query;
   const skip = (page - 1) * limit;
 
-  const where = {};
-  if (verified === 'true') where.verified = true;
+  const andConditions = [];
+  if (verified === 'true') andConditions.push({ verified: true });
 
   if (city) {
-    where.city = { contains: city.trim(), mode: 'insensitive' };
+    andConditions.push({ city: { contains: city.trim(), mode: 'insensitive' } });
   }
   if (categoryId) {
-    where.categories = { some: { id: categoryId } };
+    const category = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (category) {
+      andConditions.push({
+        OR: [
+          { categories: { some: { id: categoryId } } },
+          { products: { some: { category: category.name, status: 'APPROVED' } } }
+        ]
+      });
+    } else {
+      andConditions.push({ categories: { some: { id: categoryId } } });
+    }
   }
   if (offeringType) {
-    where.products = { some: { type: offeringType, status: 'APPROVED' } };
+    andConditions.push({ products: { some: { type: offeringType, status: 'APPROVED' } } });
   }
   if (search) {
-    where.OR = [
-      { businessName: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
-      { keywords: { some: { name: { contains: search, mode: 'insensitive' } } } },
-      { products: { some: { name: { contains: search, mode: 'insensitive' }, status: 'APPROVED' } } }
-    ];
+    andConditions.push({
+      OR: [
+        { businessName: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { keywords: { some: { name: { contains: search, mode: 'insensitive' } } } },
+        { products: { some: { name: { contains: search, mode: 'insensitive' }, status: 'APPROVED' } } },
+        { products: { some: { category: { contains: search, mode: 'insensitive' }, status: 'APPROVED' } } },
+        { categories: { some: { name: { contains: search, mode: 'insensitive' } } } }
+      ]
+    });
   }
+
+  const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
   const cacheKey = `search:vendors:${city || ''}:${categoryId || ''}:${search || ''}:${offeringType || ''}:${verified || ''}:${page}:${limit}`;
   const cachedData = await cacheService.getCache(cacheKey);
